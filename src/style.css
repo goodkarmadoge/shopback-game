@@ -372,3 +372,19 @@ input[type='range'].heat::-moz-range-thumb { width: 1.3em; height: 1.3em; border
 .reward.new { background: var(--sb-green-bg); border: 0.12em solid var(--sb-green); animation: starin 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.7s both; }
 .act.bow { width: 4.2em; height: 4.2em; background: rgba(255, 184, 28, 0.3); font-size: 0.85em; margin-bottom: 4.6em; margin-right: -4.4em; }
 .act.bow small { font-size: 0.6em; }
+
+/* welcome screen: spread across the full height, with the call to action in the bottom quarter */
+#modal.on:has(.title) { background: linear-gradient(180deg, rgba(214, 36, 110, 0.9) 0%, rgba(241, 73, 44, 0.86) 55%, rgba(120, 24, 60, 0.92) 100%); }
+.title { justify-content: space-between; padding: 9% 1.2em 7%; }
+.tgroup { position: relative; display: flex; flex-direction: column; align-items: center; width: 100%; }
+.rays { top: 30%; }
+.duo { margin-bottom: -1.9em; }
+.duo img { width: 11.5em; }
+.duo img:last-child { margin-left: -3em; }
+.logo { font-size: 3.9em; }
+.tagline { font-size: 1.12em; line-height: 1.35; margin-top: 0.6em; }
+.pillars { gap: 0.5em; margin: 0; width: 100%; }
+.pillars span { flex: 1; font-size: 0.82em; padding: 0.7em 0.2em; min-width: 0; background: rgba(20, 22, 31, 0.3); }
+.pillars b { font-size: 1.7em; }
+.titlebtns { width: 88%; margin: 0 auto 0.8em; }
+.titlebtns .btn.big { font-size: 1.6em; padding: 0.75em 1em; }
