@@ -107,7 +107,20 @@ export class ShopScene extends Phaser.Scene {
       this.dom.forEach((d) => d.remove());
       setSheet(null);
     });
-    if (this.idle) return;
+    if (this.idle) {
+      // window dressing behind menus: stocked tables and a browsing customer or two
+      const wares: ItemId[] = ['core', 'lens', 'gel', 'prism'];
+      [[120, 262], [240, 262], [120, 346], [240, 346]].forEach(([x, y], i) => {
+        this.add.image(x, y + 4, 'table').setScale(0.5).setDepth(y - 6);
+        this.add.image(x, y - 12, `item_${wares[i]}`).setDepth(y - 5);
+      });
+      for (const [key, x, y] of [['cust_collector', 104, 296], ['cust_rusher', 256, 380], ['cust_hunter', 200, 440]] as const) {
+        this.add.image(x, y + 14, 'shadow').setScale(0.5).setDepth(y - 1);
+        this.add.sprite(x, y, `${key}_0`).play(key).setDepth(y);
+      }
+      this.cameras.main.fadeIn(500);
+      return;
+    }
 
     // shelves
     const n = S.upgrades.shelf ? RULES.shelfSlotsUpgraded : RULES.shelfSlots;

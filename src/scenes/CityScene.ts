@@ -46,6 +46,12 @@ export class CityScene extends Phaser.Scene {
     super('city');
   }
 
+  private idle = false;
+
+  init(data: { idle?: boolean }) {
+    this.idle = !!data.idle;
+  }
+
   create() {
     music('shop');
     resetInput();
@@ -97,6 +103,23 @@ export class CityScene extends Phaser.Scene {
     prop('hdb_a', 6, CITY_H + 10, [150, 60]);
     prop('office_a', 356, CITY_H + 14, [90, 60]);
 
+    if (this.idle) {
+      // backdrop for the welcome screen: both shopkeepers outside the shop, camera drifting over the city
+      for (const [a, x] of [['male', 118], ['female', 152]] as const) {
+        this.add.image(x, 497, 'shadow').setScale(0.5).setDepth(490);
+        this.add.sprite(x, 472, `av_${a}`, 0).setScale(0.6).setDepth(492);
+      }
+      const cam = this.cameras.main;
+      cam.setZoom(2);
+      cam.setBounds(0, 0, 360, CITY_H);
+      cam.setScroll(-180, -250);
+      this.tweens.add({ targets: cam, scrollY: -90, duration: 9000, ease: 'Sine.inOut', yoyo: true, repeat: -1 });
+      cam.fadeIn(500);
+      this.time.addEvent({ delay: 1500, loop: true, callback: () => this.pedestrian() });
+      for (let i = 0; i < 6; i++) this.pedestrian(Math.random() * 360);
+      return;
+    }
+
     // things to do
     this.spots.push({ x: SHOP_X, y: 480, r: 26, label: 'Your shop', act: () => toast('Closed for the night. Stock up in the dungeon first.') });
     for (const pt of PARTNERS) {
@@ -143,6 +166,7 @@ export class CityScene extends Phaser.Scene {
   }
 
   update(_: number, dms: number) {
+    if (this.idle) return;
     const dt = Math.min(dms, 50) / 1000;
     const p = this.p;
     const a = this.busy ? { x: 0, y: 0 } : axis();

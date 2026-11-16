@@ -39,7 +39,6 @@ class BootScene extends Phaser.Scene {
     // painted backdrops and 3D-rendered sprites are high resolution: smooth them, keep pixel art crisp
     const smooth = ['pillar', 'shop_bg', 'city_bg', 'dungeon_bg_0', 'dungeon_bg_1', 'dungeon_bg_2', 'table', 'shadow', 'av_male', 'av_female', ...CITY_SPRITES.map((k) => `city_${k}`)];
     for (const k of smooth) this.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
-    this.scene.start('shop', { idle: true });
     title();
   }
 }
@@ -111,28 +110,35 @@ const lootRow = (ids: ItemId[]) =>
 
 // ---- title and onboarding ----
 
+let showcase: number | undefined;
+/** Any screen after the welcome screen stops the background slideshow. */
+function stopShowcase() {
+  window.clearInterval(showcase);
+  showcase = undefined;
+}
+
 function title() {
   setHud(null);
   music('shop');
-  const floaty = (key: string, x: number, y: number, d: number) =>
-    h('img', { class: 'floaty', src: artUrl(key), alt: '', style: `left:${x}%;top:${y}%;animation-delay:${d}s` });
+  // the welcome screen shows off the world behind it: the city, then the shop, and back
+  stopShowcase();
+  let where: 'city' | 'shop' = 'city';
+  go('city', { idle: true });
+  showcase = window.setInterval(() => {
+    where = where === 'city' ? 'shop' : 'city';
+    go(where, { idle: true });
+  }, 7000);
   setModal(h('div', { class: 'title' },
-    h('div', { class: 'rays' }),
-    floaty('item_core', 6, 7, 0), floaty('item_lens', 84, 6, 0.6), floaty('item_gel', 3, 44, 1.1), floaty('item_cell', 88, 43, 0.3),
-    floaty('item_prism', 9, 73.5, 0.5), floaty('item_chip', 81, 73.5, 1.2),
     h('div', { class: 'tgroup top' },
-      h('div', { class: 'duo' },
-        h('img', { src: 'avatars/male-portrait.png', alt: '' }),
-        h('img', { src: 'avatars/female-portrait.png', alt: '' })),
       h('div', { class: 'logo' }, h('span', {}, 'Shop'), h('span', { class: 'k' }, 'Keeper')),
       h('p', { class: 'tagline' }, 'Entrepreneur by Day.', h('br', {}), 'Adventurer by Night.', h('br', {}), h('b', {}, 'You are the Shop Keeper!'))),
-    h('div', { class: 'pillars' },
-      h('span', {}, h('b', {}, '⚔️'), 'Fight'), h('span', {}, h('b', {}, '🏷️'), 'Price'),
-      h('span', {}, h('b', {}, '🤝'), 'Haggle'), h('span', {}, h('b', {}, '⚡'), 'Sell out')),
     h('div', { class: 'tgroup bottom' },
+      h('div', { class: 'pillars' },
+        h('span', {}, h('b', {}, '⚔️'), 'Fight'), h('span', {}, h('b', {}, '🏷️'), 'Price'),
+        h('span', {}, h('b', {}, '🤝'), 'Haggle'), h('span', {}, h('b', {}, '⚡'), 'Sell out')),
       h('div', { class: 'titlebtns' },
-        hasSave() && btn('Continue', () => { sfx('tap'); resume(); }, 'primary big pulse'),
-        btn(hasSave() ? 'New game' : 'Play', () => { sfx('tap'); resetState(); avatarSelect(); }, hasSave() ? 'big' : 'primary big pulse')),
+        hasSave() && btn('Continue', () => { sfx('tap'); stopShowcase(); resume(); }, 'primary big pulse'),
+        btn(hasSave() ? 'New game' : 'Play', () => { sfx('tap'); stopShowcase(); resetState(); go('shop', { idle: true }); avatarSelect(); }, hasSave() ? 'big' : 'primary big pulse')),
       h('p', { class: 'fine' }, `A prototype for the ${BRAND} app`)),
   ));
 }

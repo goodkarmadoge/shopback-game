@@ -390,3 +390,20 @@ input[type='range'].heat::-moz-range-thumb { width: 1.3em; height: 1.3em; border
 .titlebtns .btn.big { font-size: 1.6em; padding: 0.75em 1em; }
 
 .tagline b { display: inline-block; margin-top: 0.25em; font-size: 1.15em; font-weight: 700; color: #ffd84a; text-shadow: 0 0.07em 0 #b5321b; }
+
+/* welcome screen over the live world: light scrims for legibility, the middle left clear */
+#modal.on:has(.title) { background: linear-gradient(180deg, rgba(20, 22, 31, 0.72) 0%, rgba(20, 22, 31, 0.35) 26%, rgba(20, 22, 31, 0) 40%, rgba(20, 22, 31, 0) 58%, rgba(20, 22, 31, 0.55) 76%, rgba(20, 22, 31, 0.86) 100%); }
+.title { padding: 11% 1.2em 6%; }
+.rays, .floaty { display: none; }
+.logo { font-size: 4.1em; text-shadow: 0 0.07em 0 rgba(0,0,0,.45), 0 0.2em 0.6em rgba(0,0,0,.5); }
+.logo .k { color: #ffd84a; text-shadow: 0 0.07em 0 #a8590a, 0 0.2em 0.6em rgba(0,0,0,.5); }
+.tagline { text-shadow: 0 1px 0 rgba(0,0,0,.6), 0 0 0.6em rgba(0,0,0,.6); }
+.tagline b { text-shadow: 0 0.07em 0 #a8590a, 0 0 0.5em rgba(0,0,0,.6); }
+.tgroup.bottom { gap: 0.9em; }
+.pillars span { background: rgba(255, 255, 255, 0.94); color: var(--sb-ink); box-shadow: 0 0.2em 0 rgba(20,22,31,.35); }
+.titlebtns { margin-bottom: 0; }
+.title .fine { color: rgba(255,255,255,.8); margin: 0; }
+.logo { font-size: 3.55em; }
+.pillars { gap: 0.35em; }
+.pillars span { flex-direction: row; justify-content: center; gap: 0.3em; font-size: 0.7em; padding: 0.45em 0.2em; border-radius: 99px; background: rgba(20, 22, 31, 0.62); color: #fff; box-shadow: none; backdrop-filter: blur(3px); }
+.pillars b { font-size: 1.15em; }
