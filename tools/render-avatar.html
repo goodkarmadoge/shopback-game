@@ -1,0 +1,134 @@
+<!doctype html>
+<!-- Dev-only page: renders a rigged GLB into a low-res sprite sheet. Driven by scripts/render-avatars.cjs. -->
+<html>
+  <body style="margin:0;background:#888">
+    <script type="module">
+      import * as THREE from 'three';
+      import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+      const DIRS = 8;
+      const FRAMES = 6;
+
+      async function load(url) {
+        const gltf = await new GLTFLoader().loadAsync(url);
+        const scene = new THREE.Scene();
+        scene.add(new THREE.HemisphereLight(0xffffff, 0xb0a090, 2.4));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+        sun.position.set(1, 3, 2);
+        scene.add(sun);
+        const pivot = new THREE.Group();
+        pivot.add(gltf.scene);
+        scene.add(pivot);
+        // flat, unlit-ish materials read better at sprite size
+        gltf.scene.traverse((o) => {
+          if (o.isMesh) {
+            o.frustumCulled = false;
+            if (o.material) {
+              o.material.metalness = 0; o.material.roughness = 1; o.material.normalMap = null;
+              const t = o.material.map;
+              if (t) { t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.anisotropy = 8; t.needsUpdate = true; }
+              o.material.needsUpdate = true;
+            }
+          }
+        });
+        const mixer = new THREE.AnimationMixer(gltf.scene);
+        const clip = gltf.animations[0];
+        if (clip) mixer.clipAction(clip).play();
+        mixer.setTime(0);
+        gltf.scene.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(gltf.scene);
+        const size = box.getSize(new THREE.Vector3());
+        const centre = box.getCenter(new THREE.Vector3());
+        gltf.scene.position.x -= centre.x;
+        gltf.scene.position.z -= centre.z;
+        gltf.scene.position.y -= box.min.y;
+        return { scene, pivot, mixer, clip, height: size.y, root: gltf.scene, info: { anims: gltf.animations.map((a) => [a.name, a.duration]), size: size.toArray() } };
+      }
+
+      function renderer(w, h) {
+        const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+        r.setPixelRatio(1);
+        r.setSize(w, h, false);
+        r.setClearColor(0x000000, 0);
+        r.outputColorSpace = THREE.SRGBColorSpace;
+        return r;
+      }
+
+      function camera(height, pitchDeg, aspect = 1) {
+        const half = height * 0.56;
+        const cam = new THREE.OrthographicCamera(-half * aspect, half * aspect, half, -half, 0.01, 100);
+        const p = (pitchDeg * Math.PI) / 180;
+        cam.position.set(0, height * 0.5 + Math.sin(p) * 10, Math.cos(p) * 10);
+        cam.lookAt(0, height * 0.5, 0);
+        return cam;
+      }
+
+      // rows = 8 facing directions (0 = toward camera, clockwise), cols = walk frames
+      window.renderSheet = async (url, cell) => {
+        const m = await load(url);
+        const SS = 6; // supersample, then shrink, so textures average out instead of sparkling
+        const r = renderer(cell * SS, cell * SS);
+        const cam = camera(m.height, 30);
+        const tmp = document.createElement('canvas');
+        tmp.width = tmp.height = cell;
+        const tctx = tmp.getContext('2d', { willReadFrequently: true });
+        tctx.imageSmoothingQuality = 'high';
+        const out = document.createElement('canvas');
+        out.width = cell * FRAMES;
+        out.height = cell * DIRS;
+        const ctx = out.getContext('2d');
+        // keep the walk in place: cancel any root motion the clip carries
+        const hips = m.root.getObjectByName('Hips') || m.root.getObjectByName('mixamorigHips');
+        // the clip holds several strides: find one stride by tracking a foot against the hips
+        const bones = [];
+        m.root.traverse((o) => o.isBone && bones.push(o));
+        const foot = bones.find((b) => /left.*foot/i.test(b.name));
+        let stride = m.clip ? m.clip.duration : 1;
+        if (foot && hips && m.clip) {
+          const v = new THREE.Vector3(), hv = new THREE.Vector3();
+          const ups = [];
+          let prev = 0;
+          for (let i = 0; i <= 400; i++) {
+            const t = (i / 400) * m.clip.duration;
+            m.mixer.setTime(t);
+            m.root.updateMatrixWorld(true);
+            const z = foot.getWorldPosition(v).z - hips.getWorldPosition(hv).z;
+            if (i && prev <= 0 && z > 0) ups.push(t);
+            prev = z;
+          }
+          if (ups.length >= 2) stride = (ups[ups.length - 1] - ups[0]) / (ups.length - 1);
+          m.info.stride = stride; m.info.start = ups[0] ?? 0; m.info.bones = bones.length;
+        }
+        const start = m.info.start ?? 0;
+        for (let d = 0; d < DIRS; d++) {
+          m.pivot.rotation.y = (-d * Math.PI * 2) / DIRS;
+          for (let f = 0; f < FRAMES; f++) {
+            if (m.clip) m.mixer.setTime(start + (f / FRAMES) * stride);
+            if (hips) { hips.position.x = 0; hips.position.z = 0; }
+            r.render(m.scene, cam);
+            tctx.clearRect(0, 0, cell, cell);
+            tctx.drawImage(r.domElement, 0, 0, cell, cell);
+            const img = tctx.getImageData(0, 0, cell, cell);
+            for (let i = 3; i < img.data.length; i += 4) img.data[i] = img.data[i] > 110 ? 255 : 0; // hard pixel edge
+            ctx.putImageData(img, f * cell, d * cell);
+          }
+        }
+        return { png: out.toDataURL('image/png'), info: m.info, hips: !!hips };
+      };
+
+      window.renderPortrait = async (url, size) => {
+        const m = await load(url);
+        if (m.clip) m.mixer.setTime(0);
+        const r = renderer(size * 3, size * 3);
+        r.render(m.scene, camera(m.height, 8));
+        const out = document.createElement('canvas');
+        out.width = out.height = size;
+        const ctx = out.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(r.domElement, 0, 0, size, size);
+        return out.toDataURL('image/png');
+      };
+      window.ready = true;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "note": "Pre-generated barter lines, written by a language model and bundled so the game works offline. {item} and {offer} are filled in by the game; the numbers always come from the rules.",
+  "hunter": {
+    "open": ["That {item} has seen better days. {offer} coins.", "I saw one cheaper down the street. {offer}?", "Hmm. I could stretch to {offer} for the {item}.", "Let's be sensible. {offer} and it's gone."],
+    "raise": ["You drive a hard bargain. {offer}.", "Fine, fine. {offer}, and that hurts.", "My wallet is crying. {offer}?", "All right, {offer}. Meet me there."],
+    "deal": ["Ha! A bargain. Deal.", "Sold. Don't tell anyone what I paid.", "Deal! I'll be back for more."],
+    "leave": ["Too rich for me. I'll keep looking.", "No deal. There are other shops.", "I'll pass. Good luck selling that."]
+  },
+  "collector": {
+    "open": ["A fine {item}. I can offer {offer}.", "This would complete my set. {offer} coins?", "Good condition. I will give you {offer}."],
+    "raise": ["Very well. {offer}, and that is generous.", "I shall go to {offer}. I do not haggle long."],
+    "deal": ["Splendid. It joins the collection.", "A fair price for a rare thing. Agreed.", "Agreed. Wrap it carefully."],
+    "leave": ["I have no time for this. Good day.", "Then it stays on your shelf. Farewell."]
+  },
+  "rusher": {
+    "open": ["No time! {offer} for the {item}, yes or no?", "I'm late. {offer}, final answer.", "Quick, quick. {offer} and I'm gone."],
+    "raise": ["{offer}! Hurry!"],
+    "deal": ["Done! Bye!", "Great, take it, thanks, bye!", "Deal. Gotta run!"],
+    "leave": ["Can't wait. Bye!", "Too slow, too pricey. I'm off!"]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "note": "Mock offer cards for the prototype. Merchants and rates are invented examples, not real deals.",
+  "categories": [
+    { "id": "travel", "label": "Travel", "emoji": "✈️" },
+    { "id": "fashion", "label": "Fashion", "emoji": "👟" },
+    { "id": "electronics", "label": "Electronics", "emoji": "🎧" },
+    { "id": "food", "label": "Food delivery", "emoji": "🍜" },
+    { "id": "beauty", "label": "Beauty", "emoji": "💄" },
+    { "id": "home", "label": "Home & living", "emoji": "🛋️" },
+    { "id": "groceries", "label": "Groceries", "emoji": "🛒" },
+    { "id": "gaming", "label": "Gaming", "emoji": "🎮" }
+  ],
+  "offers": [
+    { "id": "t1", "cat": "travel", "product": "Weekend city break, 2 nights", "merchant": "Skyhop Travel", "cashback": "6%" },
+    { "id": "t2", "cat": "travel", "product": "Carry-on cabin suitcase", "merchant": "Roamwell", "cashback": "8%" },
+    { "id": "f1", "cat": "fashion", "product": "Everyday canvas sneakers", "merchant": "Stride & Co", "cashback": "10%" },
+    { "id": "f2", "cat": "fashion", "product": "Lightweight rain jacket", "merchant": "Northpeak Outfitters", "cashback": "7%" },
+    { "id": "e1", "cat": "electronics", "product": "Noise-cancelling earbuds", "merchant": "Voltline", "cashback": "5%" },
+    { "id": "e2", "cat": "electronics", "product": "Fast-charge power bank", "merchant": "Gadget Harbour", "cashback": "9%" },
+    { "id": "d1", "cat": "food", "product": "Two dinners delivered this week", "merchant": "Bowlrunner", "cashback": "12%" },
+    { "id": "d2", "cat": "food", "product": "Bubble tea bundle for four", "merchant": "Pearl Stop", "cashback": "15%" },
+    { "id": "b1", "cat": "beauty", "product": "Daily sunscreen SPF 50", "merchant": "Glow Theory", "cashback": "11%" },
+    { "id": "b2", "cat": "beauty", "product": "Skincare starter set", "merchant": "Petal Lab", "cashback": "9%" },
+    { "id": "h1", "cat": "home", "product": "Cordless stick vacuum", "merchant": "Nestworks", "cashback": "6%" },
+    { "id": "h2", "cat": "home", "product": "Linen bedding set", "merchant": "Loomhouse", "cashback": "8%" },
+    { "id": "g1", "cat": "groceries", "product": "Weekly fresh produce box", "merchant": "Greencart", "cashback": "4%" },
+    { "id": "g2", "cat": "groceries", "product": "Pantry restock bundle", "merchant": "Corner Basket", "cashback": "5%" },
+    { "id": "p1", "cat": "gaming", "product": "Wireless game controller", "merchant": "Pixel Depot", "cashback": "7%" },
+    { "id": "p2", "cat": "gaming", "product": "Mechanical keyboard, compact", "merchant": "Keycraft", "cashback": "8%" }
+  ]
+}
