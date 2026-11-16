@@ -179,9 +179,9 @@ export class DungeonScene extends Phaser.Scene {
     for (let i = 0; i < RULES.bagSlots; i++) bag.append(h('span', { class: 'slot' }, this.bag[i] ? icon(`item_${this.bag[i]}`, 'ico s') : null));
     const boss = this.enemies.find((e) => e.kind === 'guardian');
     setHud(h('div', { class: 'dhud' },
-      h('div', { class: 'drow' }, hearts, h('span', { class: 'roomno' }, `Room ${this.room + 1}/3`)),
-      h('div', { class: 'drow' }, h('small', {}, `Bag ${this.bag.length}/${RULES.bagSlots}`), bag),
-      boss ? h('div', { class: 'boss' }, h('small', {}, `Vault Guardian ${boss.hp}/${this.bossMax}`), h('div', { class: 'bar' }, h('i', { style: `width:${(boss.hp / this.bossMax) * 100}%` }))) : null,
+      h('div', { class: 'drow' }, hearts, h('span', { class: 'roomno' }, `Room ${this.room + 1} of 3`)),
+      h('div', { class: 'drow bagrow' }, h('small', {}, `Bag ${this.bag.length} of ${RULES.bagSlots}`), bag),
+      boss ? h('div', { class: 'boss' }, h('small', {}, `Vault Guardian · ${boss.hp} of ${this.bossMax}`), h('div', { class: 'bar' }, h('i', { style: `width:${(boss.hp / this.bossMax) * 100}%` }))) : null,
     ));
   }
 

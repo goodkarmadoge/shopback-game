@@ -64,3 +64,38 @@ export const btn = (label: Kid | Kid[], onclick: () => void, cls = '') =>
 export function card(title: string, ...body: Kid[]) {
   return h('div', { class: 'card' }, h('h2', {}, title), ...body);
 }
+
+/** Count a number up from zero: used for coins and profit on result screens. */
+export function countUp(el: HTMLElement, to: number, ms = 900, prefix = '') {
+  const t0 = performance.now();
+  const step = (now: number) => {
+    const k = Math.min(1, (now - t0) / ms);
+    el.textContent = prefix + Math.round(to * (1 - Math.pow(1 - k, 3)));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/** A burst of confetti over the current modal. */
+export function confetti(n = 36) {
+  const box = h('div', { class: 'confetti' });
+  const colours = ['#f1492c', '#d6246e', '#ffb81c', '#0b8a5c', '#35c8e8', '#7a3ff2'];
+  for (let i = 0; i < n; i++) {
+    const bit = h('i');
+    bit.style.cssText = `left:${Math.random() * 100}%;background:${colours[i % colours.length]};animation-delay:${Math.random() * 0.4}s;animation-duration:${1.4 + Math.random() * 1.2}s;transform:rotate(${Math.random() * 360}deg)`;
+    box.append(bit);
+  }
+  modalLayer.append(box);
+  window.setTimeout(() => box.remove(), 3200);
+}
+
+/** Star rating out of three; earned stars pop in one after another. */
+export function stars(n: number) {
+  return h('div', { class: 'stars', 'aria-label': `${n} of 3 stars` },
+    ...[0, 1, 2].map((i) => h('span', { class: i < n ? 'on' : '', style: `animation-delay:${0.25 + i * 0.22}s` }, '★')));
+}
+
+/** Big headline block for result screens. */
+export function hero(kicker: string, title: string, sub?: Kid) {
+  return h('div', { class: 'herohead' }, h('span', { class: 'kicker' }, kicker), h('h2', {}, title), sub ? h('p', {}, sub) : null);
+}

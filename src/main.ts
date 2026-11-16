@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
+import '@fontsource-variable/fredoka';
 import './style.css';
 import { ART, buildArt } from './art';
 import { ITEMS, ItemId, RULES, estimateDay } from './econ';
 import { DaySummary, RunSummary, S, getLog, hasSave, hooks, log, resetState, save } from './state';
-import { btn, card, h, icon, setHud, setModal, toast } from './ui';
+import { btn, card, confetti, countUp, h, hero, icon, setHud, setModal, stars, toast } from './ui';
+import { artUrl } from './art';
 import { BRAND, pricingPanel } from './panels';
 import { music, setMuted, sfx } from './audio';
 import { buildScenery } from './scenery';
@@ -85,12 +87,13 @@ drawMute();
 
 function hud(label = `Day ${S.day}`) {
   const pct = S.level >= 2 ? 100 : Math.min(100, (S.xp / RULES.xpLevel2) * 100);
+  const shownXp = Math.min(S.xp, RULES.xpLevel2);
   setHud(h('div', { class: 'hudbar' },
     h('span', { class: 'pill' }, icon('coin', 'ico s'), h('b', {}, S.coins)),
     h('span', { class: 'pill xp' },
       h('b', {}, `Lv ${S.level}`),
       h('span', { class: 'bar' }, h('i', { style: `width:${pct}%` })),
-      h('small', {}, S.level >= 2 ? `${S.xp} XP` : `${S.xp}/${RULES.xpLevel2} XP`)),
+      h('small', {}, S.level >= 2 ? `${S.xp} XP` : `${shownXp}/${RULES.xpLevel2} XP`)),
     h('span', { class: 'pill' }, label),
   ));
 }
@@ -98,22 +101,37 @@ let hudLabel = '';
 hooks.hud = () => hud(hudLabel);
 
 const stat = (label: string, value: string | number, cls = '') => h('div', { class: `stat ${cls}` }, h('span', {}, label), h('b', {}, value));
+// one tile per item type, with a count, so names never wrap unevenly
 const lootRow = (ids: ItemId[]) =>
-  h('div', { class: 'loot' }, ...ids.map((id) => h('span', { class: 'lootitem' }, icon(`item_${id}`), h('small', {}, ITEMS[id].name))));
+  h('div', { class: 'loot' }, ...[...new Set(ids)].map((id) => {
+    const n = ids.filter((i) => i === id).length;
+    return h('span', { class: 'lootitem' }, icon(`item_${id}`), h('b', {}, `×${n}`), h('small', {}, ITEMS[id].name));
+  }));
 
 // ---- title and onboarding ----
 
 function title() {
   setHud(null);
   music('shop');
+  const floaty = (key: string, x: number, y: number, d: number) =>
+    h('img', { class: 'floaty', src: artUrl(key), alt: '', style: `left:${x}%;top:${y}%;animation-delay:${d}s` });
   setModal(h('div', { class: 'title' },
+    h('div', { class: 'rays' }),
+    floaty('item_core', 10, 14, 0), floaty('item_lens', 82, 10, 0.6), floaty('item_gel', 6, 52, 1.1),
+    floaty('item_cell', 86, 50, 0.3), floaty('coin', 8, 33, 0.9), floaty('coin', 84, 30, 1.4),
+    h('div', { class: 'duo' },
+      h('img', { src: 'avatars/male-portrait.png', alt: '' }),
+      h('img', { src: 'avatars/female-portrait.png', alt: '' })),
     h('div', { class: 'logo' }, h('span', {}, 'Shop'), h('span', { class: 'k' }, 'Keeper')),
-    h('p', { class: 'tagline' }, 'Sell loot by day. Fight for stock by night.'),
+    h('p', { class: 'tagline' }, 'Loot the dungeon. Run the shop.', h('br', {}), 'Pack the street.'),
+    h('div', { class: 'pillars' },
+      h('span', {}, h('b', {}, '⚔️'), 'Fight'), h('span', {}, h('b', {}, '🏷️'), 'Price'),
+      h('span', {}, h('b', {}, '🤝'), 'Haggle'), h('span', {}, h('b', {}, '⚡'), 'Sell out')),
     h('div', { class: 'titlebtns' },
-      hasSave() && btn('Continue', () => { sfx('tap'); resume(); }, 'primary big'),
-      btn(hasSave() ? 'New game' : 'Start', () => { sfx('tap'); resetState(); avatarSelect(); }, hasSave() ? 'big' : 'primary big'),
+      hasSave() && btn('Continue', () => { sfx('tap'); resume(); }, 'primary big pulse'),
+      btn(hasSave() ? 'New game' : 'Play', () => { sfx('tap'); resetState(); avatarSelect(); }, hasSave() ? 'big' : 'primary big pulse'),
     ),
-    h('p', { class: 'fine' }, `Prototype for the ${BRAND} app · one loop, about 8 minutes · coins have no cash value`),
+    h('p', { class: 'fine' }, `A prototype for the ${BRAND} app`),
   ));
 }
 
@@ -162,7 +180,7 @@ function avatarSelect() {
 
 function interests() {
   const picked = new Set<string>();
-  const count = h('p', { class: 'fine' }, 'Tap 3');
+  const count = h('p', { class: 'fine count' }, 'Pick 3 to continue');
   const chips = offerData.categories.map((c) => {
     const b = h('button', { class: 'chip', type: 'button', 'aria-pressed': 'false' }, h('span', {}, c.emoji), c.label);
     b.addEventListener('click', () => {
@@ -170,7 +188,7 @@ function interests() {
       else if (picked.size < 3) picked.add(c.id);
       b.setAttribute('aria-pressed', String(picked.has(c.id)));
       b.classList.toggle('on', picked.has(c.id));
-      count.textContent = picked.size < 3 ? `Tap ${3 - picked.size} more` : 'Great!';
+      count.textContent = picked.size < 3 ? `Pick ${3 - picked.size} more` : 'All set';
       sfx('tap');
       if (picked.size === 3) {
         window.setTimeout(() => {
@@ -210,9 +228,13 @@ function tutorialDone(d: DaySummary) {
   S.phase = 'dungeon';
   save();
   hooks.hud();
-  setModal(card('Shop closed',
-    h('p', {}, d.sales ? `You made ${d.sales} sale${d.sales > 1 ? 's' : ''} and earned ${d.revenue} coins.` : 'No sales today. Lower prices sell faster: check your notebook tomorrow.'),
-    h('p', {}, 'The shelves are nearly bare. Step out into the city: meet the neighbours, then find the old server mall in the park. Everything you carry out of the Techno Dungeon is tomorrow’s stock.'),
+  const earned = h('b', {}, '0');
+  countUp(earned, d.revenue, 800, '+');
+  if (d.sales) sfx('level');
+  setModal(h('div', { class: 'card pop' },
+    hero('Day 1', d.sales ? 'First sales!' : 'Tough crowd', d.sales ? `${d.sales} sale${d.sales > 1 ? 's' : ''} on your very first day.` : 'No sales today. Lower prices sell faster.'),
+    h('div', { class: 'bignum' }, icon('coin'), earned, h('small', {}, 'coins earned')),
+    h('p', {}, 'But the shelves are nearly bare. Head into the city, meet the neighbours, then find the old server mall in the park. Whatever you carry out of the Techno Dungeon is tomorrow’s stock.'),
     btn('Head out ▶', () => { sfx('tap'); city(); }, 'primary')));
 }
 
@@ -273,7 +295,7 @@ function offerCard() {
     morning();
   };
   setModal(h('div', { class: 'card offer' },
-    h('div', { class: 'sponsored' }, `Sponsored · ${BRAND} · Example only`),
+    h('div', { class: 'sponsored' }, `Sponsored by ${BRAND} · Example only`),
     h('h2', {}, 'Real-world loot'),
     h('div', { class: 'offerbody' },
       h('div', { class: 'offeremoji' }, cat.emoji),
@@ -318,32 +340,44 @@ function summary(d: DaySummary) {
   const withC = estimateDay({ ...base, customers: walkIns * RULES.campaignMult + S.partners.length * PARTNER_BONUS, campaign: true });
   const other = d.campaignUsed ? without.profit : withC.profit;
   const max = Math.max(profit, other, 1);
-  const bar = (label: string, v: number, cls: string) =>
-    h('div', { class: 'cmp' }, h('span', {}, label), h('div', { class: 'bar' }, h('i', { class: cls, style: `width:${(v / max) * 100}%` })), h('b', {}, v));
+  const bar = (label: string, note: string, v: number, cls: string) =>
+    h('div', { class: 'cmp' }, h('span', {}, label, h('small', {}, note)), h('div', { class: 'bar' }, h('i', { class: cls, style: `width:${(v / max) * 100}%` })), h('b', {}, v));
   let verdict: string;
   if (d.campaignUsed) {
     verdict = profit > other
-      ? `The campaign brought ${d.customers} customers instead of ${walkIns}. You paid ${d.cashback} coins in cashback and still finished about ${profit - other} coins ahead.`
+      ? `The campaign packed the shop: ${d.customers} customers instead of ${walkIns}. You gave back ${d.cashback} coins in cashback and still came out ${profit - other} ahead.`
       : `The campaign brought ${d.customers} customers instead of ${walkIns}, but this time the extra sales did not cover the cashback. More stock, or prices customers accept, makes it pay.`;
   } else {
-    verdict = `You did not run a campaign. With one, about ${walkIns * RULES.campaignMult} customers would have come by instead of ${walkIns}.`;
+    verdict = `No campaign today. Hit the ${BRAND} button tomorrow: about ${walkIns * RULES.campaignMult} customers instead of ${walkIns}.`;
   }
   log('summary', { profit, estimateOther: other, campaign: d.campaignUsed });
   S.phase = 'upgrade';
   save();
   hooks.hud();
-  setModal(card(`Day ${S.day + 1} closed`,
-    h('div', { class: 'stats' },
-      stat('Sales', `${d.sales} of ${d.startStock.length} items`),
-      stat('Revenue', d.revenue),
-      stat('Cashback paid', d.cashback ? `−${d.cashback}` : 0),
-      stat('Profit', profit, 'total')),
-    h('div', { class: 'compare' },
-      h('div', { class: 'sponsored' }, `${BRAND} campaign`),
-      bar(d.campaignUsed ? 'With campaign (you)' : 'Without campaign (you)', profit, 'you'),
-      bar(d.campaignUsed ? 'Without it (estimate)' : 'With a campaign (estimate)', other, 'est'),
+  const ratio = d.startStock.length ? d.sales / d.startStock.length : 0;
+  const rating = ratio >= 1 ? 3 : ratio >= 0.6 ? 2 : d.sales ? 1 : 0;
+  const headline = rating === 3 ? 'SOLD OUT!' : rating === 2 ? 'Great day!' : rating === 1 ? 'Shop closed' : 'Slow day';
+  const big = h('b', {}, '0');
+  countUp(big, profit, 1100, '+');
+  const gain = profit - other;
+  if (rating >= 2) sfx('level');
+  setModal(h('div', { class: 'card pop' },
+    hero(`Day ${S.day + 1}`, headline),
+    stars(rating),
+    h('div', { class: 'bignum' }, icon('coin'), big, h('small', {}, 'profit')),
+    h('div', { class: 'tiles' },
+      h('span', {}, h('b', {}, `${d.sales}/${d.startStock.length}`), h('small', {}, 'Sold')),
+      h('span', {}, h('b', {}, d.revenue), h('small', {}, 'Revenue')),
+      h('span', {}, h('b', {}, d.cashback ? `−${d.cashback}` : '0'), h('small', {}, 'Cashback'))),
+    h('div', { class: `compare ${d.campaignUsed && gain > 0 ? 'win' : ''}` },
+      h('div', { class: 'cmphead' },
+        h('b', {}, `⚡ ${BRAND} campaign`),
+        d.campaignUsed && gain > 0 ? h('span', { class: 'boost' }, `+${gain} coins`) : null),
+      bar(d.campaignUsed ? 'With campaign' : 'No campaign', 'Your day', profit, 'you'),
+      bar(d.campaignUsed ? 'Without it' : 'With a campaign', 'Estimate', other, 'est'),
       h('p', {}, verdict)),
     btn('Continue ▶', () => { sfx('tap'); levelCheck(); }, 'primary')));
+  if (rating === 3) confetti();
 }
 
 function levelCheck() {
@@ -353,17 +387,18 @@ function levelCheck() {
     hooks.hud();
     sfx('level');
     log('level_up', { level: 2 });
-    setModal(h('div', { class: 'card offer' },
+    confetti(48);
+    setModal(h('div', { class: 'card offer pop' },
       h('div', { class: 'sponsored' }, `${BRAND} reward · Example only`),
-      h('h2', {}, 'Shop Level 2!'),
+      hero('Level up', 'Shop Level 2!'),
       h('div', { class: 'offerbody' },
         h('div', { class: 'offeremoji' }, '🎟️'),
         h('div', {},
           h('b', { class: 'oproduct' }, 'Cashback boost unlocked'),
-          h('div', { class: 'omerchant' }, 'One purchase · single use · expires in 7 days'),
+          h('div', { class: 'omerchant' }, 'Single use. Expires in 7 days.'),
           h('div', { class: 'ocash' }, '+x% Cashback'))),
       h('p', { class: 'fine' }, 'Levels come from playing, never from spending or chance. In the app, this would be a real discount tied to your account.'),
-      btn('Nice ▶', () => { sfx('tap'); upgrade(); }, 'primary')));
+      btn('Claim ▶', () => { sfx('tap'); upgrade(); }, 'primary')));
   } else upgrade();
 }
 
@@ -404,10 +439,10 @@ function endCard() {
   save();
   hooks.hud();
   log('loop_complete', { day: S.day, coins: S.coins, xp: S.xp });
-  setModal(card('Come back tomorrow',
-    h('p', {}, 'That is one full loop: fight, price, sell, upgrade. In the app, play is capped at one loop a day, so the shop is always waiting tomorrow.'),
+  setModal(h('div', { class: 'card pop' },
+    hero('Loop complete', 'See you tomorrow!', 'Fight, price, sell, upgrade: that is one full loop. In the app, play is capped at one loop a day, so the shop is always waiting.'),
     h('div', { class: 'stats' }, stat('Coins', S.coins), stat('Shop level', S.level), stat('Local partners', `${S.partners.length} of ${PARTNERS.length}`), stat('Shop List', `${S.shopList.length} saved`)),
-    btn('Play the next day (demo)', () => { sfx('tap'); S.day++; S.phase = 'dungeon'; save(); city(); }, 'primary'),
+    btn('Play the next day ▶', () => { sfx('tap'); S.day++; S.phase = 'dungeon'; save(); city(); }, 'primary'),
     btn('Download event log', downloadLog),
     btn('Start over', () => { resetState(); title(); go('shop', { idle: true }); }, 'ghost')));
 }

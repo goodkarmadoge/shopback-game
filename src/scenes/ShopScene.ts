@@ -4,7 +4,8 @@ import {
 } from '../econ';
 import { S, hooks, log, save } from '../state';
 import { btn, floatAt, floatLayer, h, icon, place, setModal, setSheet } from '../ui';
-import { BRAND, EMOTE, pricingPanel } from '../panels';
+import { BRAND, EMOTE, heat, pricingPanel } from '../panels';
+import { axis, buildControls, resetInput } from '../input';
 import { music, sfx } from '../audio';
 import lines from '../lines.json';
 import { PARTNER_BONUS } from './CityScene';
@@ -34,6 +35,7 @@ interface Haggle {
 }
 
 const DOOR = { x: 180, y: 500 };
+const COUNTER = { x: 94, y: 108, w: 172, h: 46 };
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const pickOne = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 
@@ -58,8 +60,16 @@ export class ShopScene extends Phaser.Scene {
   private haggles: Haggle[] = [];
   private cur: Haggle | null = null;
   private dom: HTMLElement[] = [];
-  private coachText = '';
   private over = false;
+  private toldRestock = false;
+  // the shopkeeper, walked around the shop by the player
+  private p = { x: 180, y: 104, fx: 0, fy: 1 };
+  private hero!: Phaser.GameObjects.Sprite;
+  private heroShadow!: Phaser.GameObjects.Image;
+  // top-of-screen day UI
+  private statusEl!: HTMLElement;
+  private coachEl!: HTMLElement;
+  private fab?: HTMLButtonElement;
 
   constructor() {
     super('shop');
@@ -76,14 +86,19 @@ export class ShopScene extends Phaser.Scene {
     this.dom = [];
     this.campaign = false;
     this.over = false;
+    this.toldRestock = false;
     this.revenue = this.cashback = this.sales = this.arrived = 0;
+    this.p = { x: 180, y: 104, fx: 0, fy: 1 };
   }
 
   create() {
     music('shop');
+    resetInput();
     this.cameras.main.setZoom(2).centerOn(180, 320);
     this.add.image(0, 0, 'shop_bg').setOrigin(0).setScale(0.5).setDepth(-10);
-    this.add.sprite(180, 86, `av_${S.avatar}`, 0).setScale(0.6).setDepth(-9);
+    this.heroShadow = this.add.image(0, 0, 'shadow').setScale(0.5);
+    this.hero = this.add.sprite(180, 84, `av_${S.avatar}`, 0).setScale(0.6);
+    this.placeHero(false);
 
     this.time.addEvent({ delay: 2600, loop: true, callback: () => this.pedestrian() });
     this.pedestrian();
@@ -111,24 +126,80 @@ export class ShopScene extends Phaser.Scene {
     }
     for (const s of this.slots) this.stockSlot(s, false);
 
+    // day status, coach line and the campaign button live at the top of the screen
+    this.statusEl = h('div', { class: 'daystrip' });
+    this.coachEl = h('div', { class: 'coachtop' });
+    floatLayer.append(this.statusEl, this.coachEl);
+    this.dom.push(this.statusEl, this.coachEl);
+    if (!this.tutorial) {
+      this.fab = h('button', { class: 'fab', type: 'button', 'aria-label': `Start ${BRAND} campaign: three times the customers, 10% cashback per sale` },
+        h('span', { class: 'bolt' }, '⚡'), h('b', {}, BRAND), h('small', {}, 'Campaign'));
+      this.fab.addEventListener('click', () => this.startCampaign());
+      floatLayer.append(this.fab);
+      this.dom.push(this.fab);
+    }
     this.coach(this.tutorial
-      ? 'Two customers are on their way. Watch how they react to your prices.'
-      : `Shop is open. Start a ${BRAND} campaign early to fill the street.`);
-
+      ? 'Customers are coming! Watch how they react to your prices.'
+      : `Tap the ${BRAND} button to pull in a crowd. Walk up to an empty shelf to restock it.`);
+    this.showControls();
+    this.refresh();
     void this.runDay();
   }
 
-  update() {
+  update(_: number, dms: number) {
+    const dt = Math.min(dms, 50) / 1000;
+    if (!this.idle && !this.over) this.moveHero(dt);
     for (const cu of this.custs) {
       cu.sp.setDepth(cu.sp.y);
       cu.sh.setPosition(cu.sp.x, cu.sp.y + 14).setDepth(cu.sp.y - 1);
       if (cu.bubble) place(cu.bubble, cu.sp.x, cu.sp.y - 22);
     }
     for (const s of this.slots) {
-      const text = s.item ? String(S.prices[s.item]) : '';
+      const need = !s.item && this.back.length > 0;
+      const text = s.item ? String(S.prices[s.item]) : need ? '+ Restock' : '';
       if (s.tag.textContent !== text) s.tag.textContent = text;
-      s.tag.classList.toggle('off', !s.item);
+      s.tag.classList.toggle('off', !text);
+      s.tag.classList.toggle('need', need);
     }
+  }
+
+  // ---- the shopkeeper ----
+
+  private blocked(x: number, y: number) {
+    if (x > COUNTER.x - 8 && x < COUNTER.x + COUNTER.w + 8 && y > COUNTER.y && y < COUNTER.y + COUNTER.h + 6) return true;
+    return this.slots.some((s) => Math.abs(x - s.x) < 30 && y > s.y - 12 && y < s.y + 22);
+  }
+
+  private moveHero(dt: number) {
+    const p = this.p;
+    const a = axis();
+    const moving = Math.hypot(a.x, a.y) > 0.1;
+    if (moving) {
+      const m = Math.hypot(a.x, a.y);
+      p.fx = a.x / m;
+      p.fy = a.y / m;
+      const nx = Phaser.Math.Clamp(p.x + a.x * 125 * dt, 26, 334);
+      const ny = Phaser.Math.Clamp(p.y + a.y * 125 * dt, 104, 494);
+      if (!this.blocked(nx, p.y)) p.x = nx;
+      if (!this.blocked(p.x, ny)) p.y = ny;
+    }
+    this.placeHero(moving);
+
+    // walking up to an empty shelf restocks it from the back room
+    for (const s of this.slots) {
+      if (s.item || !this.back.length || Math.hypot(p.x - s.x, p.y - (s.y + 6)) > 40) continue;
+      this.stockSlot(s);
+      sfx('tap');
+      floatAt(s.x, s.y - 26, 'Restocked!', 'gain', 800);
+      this.refresh();
+    }
+  }
+
+  private placeHero(moving: boolean) {
+    const p = this.p;
+    const dir = (Math.round(Math.atan2(-p.fx, p.fy) / (Math.PI / 4)) + 8) % 8;
+    this.hero.setFrame(dir * 6 + (moving ? Math.floor(this.time.now / 90) % 6 : 0)).setPosition(p.x, p.y - 20).setDepth(p.y);
+    this.heroShadow.setPosition(p.x, p.y + 5).setDepth(p.y - 1);
   }
 
   // ---- helpers ----
@@ -144,8 +215,10 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private coach(text: string) {
-    this.coachText = text;
-    this.renderSheet();
+    this.coachEl.textContent = text;
+    this.coachEl.classList.remove('pop');
+    void this.coachEl.offsetWidth;
+    this.coachEl.classList.add('pop');
   }
 
   private bubble(cu: Cust, face: string, word: string, cls = '') {
@@ -162,7 +235,7 @@ export class ShopScene extends Phaser.Scene {
     s.icon.setVisible(!!s.item);
     if (s.item) {
       s.icon.setTexture(`item_${s.item}`);
-      if (pop) this.tweens.add({ targets: s.icon, scale: { from: 0.2, to: 1 }, duration: 220, ease: 'Back.out' });
+      if (pop) this.tweens.add({ targets: s.icon, scale: { from: 0.2, to: 1 }, duration: 260, ease: 'Back.out' });
     }
   }
 
@@ -189,13 +262,13 @@ export class ShopScene extends Phaser.Scene {
       ? [{ type: 'rusher', wants: 'gear' }, { type: 'hunter', wants: 'cell' }]
       : Array.from({ length: walkIns }, () => makeCustomer(Math.random));
     this.total = this.queue.length;
-    this.renderSheet();
+    this.refresh();
     await this.wait(1200);
 
     while (this.queue.length) {
       void this.visit(this.queue.shift()!);
       this.arrived++;
-      this.renderSheet();
+      this.refresh();
       if (this.tutorial) {
         while (this.custs.length) await this.wait(300);
         await this.wait(600);
@@ -204,12 +277,15 @@ export class ShopScene extends Phaser.Scene {
       }
       if (!S.stock.length && !this.custs.length) {
         this.queue = [];
-        this.coach('Sold out! Closing up for the day.');
+        this.coach('SOLD OUT! Closing up for the day.');
       }
     }
     while (this.custs.length) await this.wait(300);
     await this.wait(700);
     this.over = true;
+    this.statusEl.remove();
+    this.coachEl.remove();
+    this.fab?.remove();
     setSheet(null);
     log('day_end', { tutorial: this.tutorial, revenue: this.revenue, cashback: this.cashback, sales: this.sales, campaign: this.campaign });
     hooks.dayEnded({
@@ -229,13 +305,21 @@ export class ShopScene extends Phaser.Scene {
     await this.walk(sp, DOOR.x + rnd(-8, 8), sp.y);
     await this.walk(sp, DOOR.x, DOOR.y);
 
-    // find a free shelf with the item they want; wait a moment if someone else is looking at it
+    // Find a free shelf with the item they want. They wait a little if someone else is
+    // looking at it, or if it is in the back room and the shelf needs restocking.
     let slot: Slot | undefined;
-    for (let tries = 0; tries < 4; tries++) {
+    for (let tries = 0; tries < 5; tries++) {
       slot = this.slots.find((s) => s.item === c.wants && !s.reserved);
-      if (slot || !this.slots.some((s) => s.item === c.wants)) break;
+      if (slot || !(this.slots.some((s) => s.item === c.wants) || this.back.includes(c.wants))) break;
+      if (tries === 0 && this.back.includes(c.wants)) {
+        this.bubble(cu, '👀', `Any ${it.name}?`, 'wait');
+        if (!this.toldRestock) {
+          this.toldRestock = true;
+          this.coach('A shelf is empty! Walk over to it to restock.');
+        }
+      }
       await this.walk(sp, rnd(140, 220), rnd(440, 465));
-      await this.wait(900);
+      await this.wait(1100);
     }
 
     if (!slot) {
@@ -257,13 +341,13 @@ export class ShopScene extends Phaser.Scene {
       let price: number | null = null;
       if (a === 'buy') {
         price = ask;
-        if (this.tutorial) this.coach(r === 'delighted' ? 'Sold at once. Delighted means you could have asked for more.' : 'Sold at your asking price. Happy customers pay in full.');
+        if (this.tutorial) this.coach(r === 'delighted' ? 'Sold in a flash! Delighted means you could have asked for more.' : 'Sold at full price! Happy customers pay what you ask.');
       } else if (a === 'barter') {
         this.bubble(cu, '💬', 'Wants to barter', 'wait');
         price = await this.barter(cu, c.wants, ask);
       } else {
         sfx('leave');
-        if (this.tutorial) this.coach('Annoyed: your price was far too high, so they left. Tap Prices to lower it.');
+        if (this.tutorial) this.coach('Annoyed! That price was far too high, so they left. Tap Prices to lower it.');
       }
       if (price != null && slot.item === c.wants) this.sell(cu, slot, price);
       else slot.reserved = false;
@@ -275,7 +359,7 @@ export class ShopScene extends Phaser.Scene {
     await this.walk(sp, DOOR.x, DOOR.y);
     await this.walk(sp, DOOR.x, 580);
     this.custs.splice(this.custs.indexOf(cu), 1);
-    this.renderSheet();
+    this.refresh();
     cu.sh.destroy();
     await this.walk(sp, left ? 380 : -20, sp.y);
     sp.destroy();
@@ -300,8 +384,8 @@ export class ShopScene extends Phaser.Scene {
     this.revenue += price;
     this.sales++;
     sfx('coin');
-    floatAt(slot.x, slot.y - 26, `+${price}`, 'gain');
-    for (let i = 0; i < 3; i++) this.flyCoin('coin', slot.x + rnd(-8, 8), slot.y - 10, 40, 24, i * 70);
+    floatAt(slot.x, slot.y - 26, `+${price}`, 'gain big');
+    for (let i = 0; i < 4; i++) this.flyCoin('coin', slot.x + rnd(-8, 8), slot.y - 10, 40, 24, i * 70);
 
     if (this.campaign) {
       const cb = Math.round(price * RULES.cashback);
@@ -316,9 +400,7 @@ export class ShopScene extends Phaser.Scene {
     log('sale', { item: id, price, type: cu.c.type, campaign: this.campaign });
     hooks.hud();
     save();
-    this.time.delayedCall(700, () => {
-      if (!this.over && !slot.item) this.stockSlot(slot);
-    });
+    this.refresh();
   }
 
   // ---- bartering ----
@@ -331,13 +413,14 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private pump() {
-    if (!this.cur && this.haggles.length) {
+    if (this.cur) return; // a barter is on screen: leave its panel alone
+    if (this.haggles.length) {
       this.cur = this.haggles.shift()!;
       this.cur.line = say(this.cur.cu.c.type, 'open', this.cur.item, this.cur.b.offer);
       this.bubble(this.cur.cu, '💬', 'Bartering', 'wait');
       sfx('tap');
-    }
-    this.renderSheet();
+      this.showBarter();
+    } else this.showControls();
   }
 
   /** counter === null means Accept. */
@@ -351,7 +434,7 @@ export class ShopScene extends Phaser.Scene {
     else {
       cur.line = say(cur.cu.c.type, 'raise', cur.item, res.offer);
       sfx('tap');
-      this.renderSheet();
+      this.showBarter();
     }
   }
 
@@ -365,14 +448,14 @@ export class ShopScene extends Phaser.Scene {
     if (this.tutorial) {
       this.coach(price != null
         ? 'Deal! Bargain Hunters never pay full value, but they nearly always buy.'
-        : 'Out of patience, so they left. Accept an offer before patience hits zero.');
+        : 'Out of patience, so they walked. Accept an offer before patience hits zero.');
     }
     cur.res(price);
     this.cur = null;
     this.pump();
   }
 
-  // ---- bottom sheet: day status, campaign button, barter panel ----
+  // ---- UI: top strip, campaign button, bottom sheet ----
 
   private startCampaign() {
     if (this.campaign || this.tutorial || !this.queue.length) return;
@@ -383,68 +466,84 @@ export class ShopScene extends Phaser.Scene {
     this.total += extra;
     sfx('campaign');
     log('campaign_start', { arrived: this.arrived, extra });
-    this.coach(`${BRAND} campaign live! The street is filling up. Every sale pays 10% cashback.`);
-    floatAt(180, 300, `${BRAND} campaign live!`, 'banner', 2000);
-    for (let i = 0; i < 14; i++) this.time.delayedCall(i * 160, () => this.pedestrian(rnd(540, 628)));
+    this.coach(`Here they come! +${extra} customers. Every sale pays 10% cashback.`);
+    floatAt(180, 300, `${BRAND} campaign live!`, 'banner', 2200);
+    this.cameras.main.flash(260, 255, 120, 90);
+    for (let i = 0; i < 18; i++) this.time.delayedCall(i * 140, () => this.pedestrian(rnd(540, 628)));
     this.time.addEvent({ delay: 700, loop: true, callback: () => this.pedestrian() });
-    this.renderSheet();
+    this.refresh();
   }
 
-  private renderSheet() {
+  /** Cheap to call: only touches the top strip and the campaign button, never the barter panel. */
+  private refresh() {
     if (this.over || this.idle) return;
-    const status = h('div', { class: 'daybar' },
-      h('span', {}, `Customers ${this.arrived} of ${this.total}`),
-      h('span', {}, `Stock left ${S.stock.length}`),
+    this.statusEl.replaceChildren(
+      h('span', {}, h('small', {}, 'Customers'), h('b', {}, `${this.arrived}/${this.total}`)),
+      h('span', {}, h('small', {}, 'Stock'), h('b', {}, S.stock.length)),
       btn('Prices', () => this.openPrices(), 'small'),
     );
-    const kids: (HTMLElement | false)[] = [status, !!this.coachText && !this.cur && h('p', { class: 'coach' }, this.coachText)];
-
-    if (!this.tutorial) {
-      if (this.campaign) kids.push(h('div', { class: 'campaign live' }, `⚡ ${BRAND} campaign live · 3× customers · 10% cashback`));
-      else if (this.queue.length) {
-        kids.push(btn([h('b', {}, `⚡ Start ${BRAND} campaign`), h('small', {}, '' + (S.partners.length ? `3× customers +${S.partners.length * PARTNER_BONUS} from partners · 10% cashback per sale · once a day` : '3× customers today · you pay 10% cashback per sale · once a day'))],
-          () => this.startCampaign(), 'campaign'));
-      }
+    if (this.fab) {
+      this.fab.classList.toggle('live', this.campaign);
+      this.fab.disabled = this.campaign || !this.queue.length;
+      if (this.campaign) this.fab.replaceChildren(h('span', { class: 'bolt' }, '⚡'), h('b', {}, 'LIVE'), h('small', {}, '3× crowd'));
     }
+  }
 
-    const cur = this.cur;
-    if (cur) {
-      const b = cur.b;
-      const T = CTYPES[b.type];
-      const pips = '●'.repeat(b.patience) + '○'.repeat(b.patience0 - b.patience);
-      const panel = h('div', { class: 'barter' },
-        h('div', { class: 'bhead' },
-          icon(`cust_${b.type}_0`),
-          h('div', {}, h('b', {}, T.name), h('small', {}, T.blurb)),
-          h('div', { class: 'patience', 'aria-label': `Patience ${b.patience} of ${b.patience0}` }, h('small', {}, `Patience ${b.patience}/${b.patience0}`), h('span', {}, pips)),
-        ),
-        h('p', { class: 'line' }, `“${cur.line}”`),
-        h('div', { class: 'bitem' }, icon(`item_${cur.item}`, 'ico s'), `${ITEMS[cur.item].name} · your price ${b.ask} · they offer `, h('b', {}, b.offer)),
-      );
-      const row = h('div', { class: 'brow' },
-        btn(['Accept ', h('b', {}, b.offer)], () => this.act(null), 'primary'),
-        btn(['Hold firm ', h('b', {}, b.ask)], () => this.act(b.ask)),
-      );
-      panel.append(row);
-      if (b.ask - b.offer > 1) {
-        const mid = Math.round((b.ask + b.offer) / 2);
-        const out = h('b', {}, mid);
-        const slider = h('input', {
-          type: 'range', min: b.offer + 1, max: b.ask - 1, step: 1, value: mid, 'aria-label': 'Counter offer',
-          oninput: () => (out.textContent = slider.value),
-        });
-        panel.append(h('div', { class: 'brow counter' }, slider, btn(['Counter ', out], () => this.act(Number(slider.value)))));
-      }
-      if (this.tutorial) panel.append(h('p', { class: 'tip' }, 'Tip: each Counter or Hold firm costs 1 patience. At zero, they walk out.'));
-      kids.push(panel);
-    } else if (this.haggles.length === 0 && this.tutorial && this.arrived === 0) {
-      kids.push(h('p', { class: 'tip' }, 'Prices are on the tags. Tap Prices to change them at any time.'));
+  private showControls() {
+    if (this.over || this.idle) return;
+    resetInput();
+    setSheet(h('div', { class: 'cityui' }, buildControls()));
+  }
+
+  private showBarter() {
+    const cur = this.cur!;
+    const b = cur.b;
+    const T = CTYPES[b.type];
+    const pips = '●'.repeat(b.patience) + '○'.repeat(b.patience0 - b.patience);
+    const panel = h('div', { class: 'barter' },
+      h('div', { class: 'bhead' },
+        icon(`cust_${b.type}_0`),
+        h('div', {}, h('b', {}, T.name), h('small', {}, T.blurb)),
+        h('div', { class: `patience ${b.patience <= 1 ? 'last' : ''}`, 'aria-label': `Patience ${b.patience} of ${b.patience0}` },
+          h('small', {}, b.patience <= 1 ? 'Last chance!' : 'Patience'), h('span', {}, pips)),
+      ),
+      h('p', { class: 'line' }, `“${cur.line}”`),
+      h('div', { class: 'bitem' },
+        h('span', { class: 'bname' }, icon(`item_${cur.item}`, 'ico s'), ITEMS[cur.item].name),
+        h('span', {}, h('small', {}, 'Your price'), h('b', {}, b.ask)),
+        h('span', { class: 'theirs' }, h('small', {}, 'Their offer'), h('b', {}, b.offer))),
+      h('div', { class: 'brow' },
+        btn([h('small', {}, 'Safe'), h('b', {}, `Accept ${b.offer}`)], () => this.act(null), 'deal go'),
+        btn([h('small', {}, 'Risky'), h('b', {}, `Hold firm ${b.ask}`)], () => this.act(b.ask), 'deal hold'),
+      ),
+    );
+    if (b.ask - b.offer > 1) {
+      // counter slider: green beside their offer (likely yes), red beside your price (likely no)
+      const lo = b.offer + 1;
+      const hi = b.ask - 1;
+      const out = h('b', {});
+      const word = h('small', {});
+      const slider = h('input', { type: 'range', class: 'heat', min: lo, max: hi, step: 1, value: Math.round((b.ask + b.offer) / 2), 'aria-label': 'Counter offer' });
+      const counterBtn = btn([word, out], () => this.act(Number(slider.value)), 'deal counter');
+      const paint = () => {
+        const t = hi === lo ? 0.5 : (Number(slider.value) - lo) / (hi - lo);
+        out.textContent = `Counter ${slider.value}`;
+        word.textContent = t < 0.34 ? 'Likely yes' : t < 0.67 ? 'Could go either way' : 'Pushing it';
+        counterBtn.style.setProperty('--heat', heat(t));
+      };
+      slider.addEventListener('input', paint);
+      paint();
+      panel.append(h('div', { class: 'brow counter' },
+        h('div', { class: 'heatwrap' }, slider, h('div', { class: 'heatends' }, h('small', {}, 'Safer'), h('small', {}, 'Greedier'))),
+        counterBtn));
     }
-    setSheet(h('div', { class: 'sheetbox' }, ...kids));
+    if (this.tutorial) panel.append(h('p', { class: 'tip' }, 'Each Counter or Hold firm costs 1 patience. At zero, they walk out.'));
+    setSheet(h('div', { class: 'sheetbox' }, panel));
   }
 
   private openPrices() {
     sfx('tap');
+    resetInput();
     setModal(pricingPanel('Prices', 'Changes apply to the next customer.', 'Done', () => setModal(null)));
   }
 }

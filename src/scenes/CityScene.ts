@@ -94,8 +94,8 @@ export class CityScene extends Phaser.Scene {
     prop('barrel', 276, 846, [18, 12], 0.7);
     prop('traffic_cone', 116, 800, undefined, 0.5);
     prop('traffic_cone', 246, 800, undefined, 0.5);
-    prop('hdb_a', 34, CITY_H + 6, [150, 60]);
-    prop('office_a', 338, CITY_H + 10, [90, 60]);
+    prop('hdb_a', 6, CITY_H + 10, [150, 60]);
+    prop('office_a', 356, CITY_H + 14, [90, 60]);
 
     // things to do
     this.spots.push({ x: SHOP_X, y: 480, r: 26, label: 'Your shop', act: () => toast('Closed for the night. Stock up in the dungeon first.') });
