@@ -7,6 +7,7 @@ import { btn, floatAt, floatLayer, h, icon, place, setModal, setSheet } from '..
 import { BRAND, EMOTE, pricingPanel } from '../panels';
 import { music, sfx } from '../audio';
 import lines from '../lines.json';
+import { PARTNER_BONUS } from './CityScene';
 
 interface Slot {
   x: number;
@@ -20,6 +21,7 @@ interface Slot {
 interface Cust {
   c: Customer;
   sp: Phaser.GameObjects.Sprite;
+  sh: Phaser.GameObjects.Image;
   bubble?: HTMLElement;
 }
 
@@ -79,9 +81,9 @@ export class ShopScene extends Phaser.Scene {
 
   create() {
     music('shop');
-    this.add.image(0, 0, 'shop_bg').setOrigin(0).setDepth(-10);
-    this.add.image(180, 112, 'shadow').setDepth(90);
-    this.add.sprite(180, 92, `av_${S.avatar}`, 0).setDepth(98);
+    this.cameras.main.setZoom(2).centerOn(180, 320);
+    this.add.image(0, 0, 'shop_bg').setOrigin(0).setScale(0.5).setDepth(-10);
+    this.add.sprite(180, 86, `av_${S.avatar}`, 0).setScale(0.6).setDepth(-9);
 
     this.time.addEvent({ delay: 2600, loop: true, callback: () => this.pedestrian() });
     this.pedestrian();
@@ -99,7 +101,7 @@ export class ShopScene extends Phaser.Scene {
     this.back = [...S.stock];
     for (const y of [262, 346]) {
       for (const x of xs) {
-        this.add.image(x, y, 'table').setDepth(y - 6);
+        this.add.image(x, y + 4, 'table').setScale(0.5).setDepth(y - 6);
         const tag = h('div', { class: 'tag' });
         place(tag, x, y + 13);
         floatLayer.append(tag);
@@ -119,6 +121,7 @@ export class ShopScene extends Phaser.Scene {
   update() {
     for (const cu of this.custs) {
       cu.sp.setDepth(cu.sp.y);
+      cu.sh.setPosition(cu.sp.x, cu.sp.y + 14).setDepth(cu.sp.y - 1);
       if (cu.bubble) place(cu.bubble, cu.sp.x, cu.sp.y - 22);
     }
     for (const s of this.slots) {
@@ -219,7 +222,7 @@ export class ShopScene extends Phaser.Scene {
     const key = `cust_${c.type}`;
     const left = Math.random() < 0.5;
     const sp = this.add.sprite(left ? -20 : 380, rnd(565, 600), `${key}_0`).play(key);
-    const cu: Cust = { c, sp };
+    const cu: Cust = { c, sp, sh: this.add.image(sp.x, sp.y + 14, 'shadow').setScale(0.5) };
     this.custs.push(cu);
     const it = ITEMS[c.wants];
 
@@ -273,6 +276,7 @@ export class ShopScene extends Phaser.Scene {
     await this.walk(sp, DOOR.x, 580);
     this.custs.splice(this.custs.indexOf(cu), 1);
     this.renderSheet();
+    cu.sh.destroy();
     await this.walk(sp, left ? 380 : -20, sp.y);
     sp.destroy();
   }
@@ -373,7 +377,8 @@ export class ShopScene extends Phaser.Scene {
   private startCampaign() {
     if (this.campaign || this.tutorial || !this.queue.length) return;
     this.campaign = true;
-    const extra = this.queue.length * (RULES.campaignMult - 1);
+    // partner businesses send their regulars too
+    const extra = this.queue.length * (RULES.campaignMult - 1) + S.partners.length * PARTNER_BONUS;
     for (let i = 0; i < extra; i++) this.queue.push(makeCustomer(Math.random));
     this.total += extra;
     sfx('campaign');
@@ -397,7 +402,7 @@ export class ShopScene extends Phaser.Scene {
     if (!this.tutorial) {
       if (this.campaign) kids.push(h('div', { class: 'campaign live' }, `⚡ ${BRAND} campaign live · 3× customers · 10% cashback`));
       else if (this.queue.length) {
-        kids.push(btn([h('b', {}, `⚡ Start ${BRAND} campaign`), h('small', {}, '3× customers today · you pay 10% cashback per sale · once a day')],
+        kids.push(btn([h('b', {}, `⚡ Start ${BRAND} campaign`), h('small', {}, '' + (S.partners.length ? `3× customers +${S.partners.length * PARTNER_BONUS} from partners · 10% cashback per sale · once a day` : '3× customers today · you pay 10% cashback per sale · once a day'))],
           () => this.startCampaign(), 'campaign'));
       }
     }

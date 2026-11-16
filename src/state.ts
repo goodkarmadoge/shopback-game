@@ -24,6 +24,7 @@ export interface State {
   shopList: string[];
   muted: boolean;
   avatar: 'male' | 'female';
+  partners: string[];
 }
 
 const SAVE_KEY = 'shopkeeper-save-v1';
@@ -46,6 +47,7 @@ export function fresh(): State {
     shopList: [],
     muted: false,
     avatar: 'male',
+    partners: [],
   };
 }
 
@@ -127,4 +129,5 @@ export const hooks = {
   dayEnded: (_: DaySummary) => {},
   runEnded: (_: RunSummary) => {},
   hud: () => {},
+  cityExit: () => {},
 };

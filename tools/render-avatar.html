@@ -66,7 +66,7 @@
       // rows = 8 facing directions (0 = toward camera, clockwise), cols = walk frames
       window.renderSheet = async (url, cell) => {
         const m = await load(url);
-        const SS = 6; // supersample, then shrink, so textures average out instead of sparkling
+        const SS = 3; // supersample, then shrink, so textures average out instead of sparkling
         const r = renderer(cell * SS, cell * SS);
         const cam = camera(m.height, 30);
         const tmp = document.createElement('canvas');
@@ -109,7 +109,6 @@
             tctx.clearRect(0, 0, cell, cell);
             tctx.drawImage(r.domElement, 0, 0, cell, cell);
             const img = tctx.getImageData(0, 0, cell, cell);
-            for (let i = 3; i < img.data.length; i += 4) img.data[i] = img.data[i] > 110 ? 255 : 0; // hard pixel edge
             ctx.putImageData(img, f * cell, d * cell);
           }
         }
@@ -127,6 +126,41 @@
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(r.domElement, 0, 0, size, size);
         return out.toDataURL('image/png');
+      };
+      // Static props and buildings: 3/4 view, trimmed to the model, soft ground shadow baked in.
+      window.renderProp = async (url, pxPerMeter, yawDeg, pitchDeg) => {
+        const gltf = await new GLTFLoader().loadAsync(url);
+        const scene = new THREE.Scene();
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x9a8f80, 2.2));
+        const sun = new THREE.DirectionalLight(0xfff2d8, 2.0);
+        sun.position.set(-2, 4, 3);
+        scene.add(sun);
+        const pivot = new THREE.Group();
+        pivot.add(gltf.scene);
+        pivot.rotation.y = (yawDeg * Math.PI) / 180;
+        scene.add(pivot);
+        pivot.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(pivot);
+        const size = box.getSize(new THREE.Vector3());
+        const c = box.getCenter(new THREE.Vector3());
+        const p = (pitchDeg * Math.PI) / 180;
+        const halfW = size.x / 2 + 0.2;
+        const halfH = (size.y * Math.cos(p) + size.z * Math.sin(p)) / 2 + 0.2;
+        const cam = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, 0.01, 2000);
+        cam.position.set(c.x, c.y + Math.sin(p) * 500, c.z + Math.cos(p) * 500);
+        cam.lookAt(c);
+        const W = Math.max(8, Math.round(halfW * 2 * pxPerMeter));
+        const H = Math.max(8, Math.round(halfH * 2 * pxPerMeter));
+        const SS = 2;
+        const r = renderer(W * SS, H * SS);
+        r.render(scene, cam);
+        const out = document.createElement('canvas');
+        out.width = W; out.height = H;
+        const ctx = out.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(r.domElement, 0, 0, W, H);
+        r.dispose();
+        return { png: out.toDataURL('image/png'), w: W, h: H, size: size.toArray() };
       };
       window.ready = true;
     </script>

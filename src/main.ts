@@ -6,13 +6,17 @@ import { DaySummary, RunSummary, S, getLog, hasSave, hooks, log, resetState, sav
 import { btn, card, h, icon, setHud, setModal, toast } from './ui';
 import { BRAND, pricingPanel } from './panels';
 import { music, setMuted, sfx } from './audio';
+import { buildScenery } from './scenery';
+import { mountViewer } from './viewer3d';
 import { ShopScene } from './scenes/ShopScene';
+import { CITY_SPRITES, CityScene, PARTNERS, PARTNER_BONUS } from './scenes/CityScene';
 import { DungeonScene } from './scenes/DungeonScene';
 import offerData from './offers.json';
 
 // ---- boot ----
 
 buildArt();
+buildScenery();
 
 class BootScene extends Phaser.Scene {
   constructor() {
@@ -20,13 +24,18 @@ class BootScene extends Phaser.Scene {
   }
   preload() {
     // shopkeeper avatars: sprite sheets rendered from the 3D models (see scripts/render-avatars.cjs)
-    for (const a of ['male', 'female']) this.load.spritesheet(`av_${a}`, `avatars/${a}.png`, { frameWidth: 48, frameHeight: 48 });
+    for (const a of ['male', 'female']) this.load.spritesheet(`av_${a}`, `avatars/${a}.png`, { frameWidth: 96, frameHeight: 96 });
+    // city buildings and props: sprites rendered from 3D models (see scripts/render-city.cjs)
+    for (const k of CITY_SPRITES) this.load.image(`city_${k}`, `city/${k}.png`);
   }
   create() {
     for (const [key, canvas] of Object.entries(ART)) this.textures.addCanvas(key, canvas);
     for (const k of ['hero', 'cust_hunter', 'cust_collector', 'cust_rusher', 'ped_a', 'ped_b', 'bot', 'drone', 'slime', 'guardian']) {
       this.anims.create({ key: k, frames: [{ key: `${k}_0` }, { key: `${k}_1` }], frameRate: k === 'drone' ? 12 : 5, repeat: -1 });
     }
+    // painted backdrops and 3D-rendered sprites are high resolution: smooth them, keep pixel art crisp
+    const smooth = ['shop_bg', 'city_bg', 'dungeon_bg_0', 'dungeon_bg_1', 'dungeon_bg_2', 'table', 'shadow', 'av_male', 'av_female', ...CITY_SPRITES.map((k) => `city_${k}`)];
+    for (const k of smooth) this.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
     this.scene.start('shop', { idle: true });
     title();
   }
@@ -40,16 +49,18 @@ fit();
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: 360,
-  height: 640,
+  // the world is 360x640; it is drawn at twice that so 3D-rendered art keeps its detail
+  width: 720,
+  height: 1280,
   pixelArt: true,
   backgroundColor: '#1a1320',
   scale: { mode: Phaser.Scale.FIT },
-  scene: [BootScene, ShopScene, DungeonScene],
+  scene: [BootScene, ShopScene, CityScene, DungeonScene],
 });
 
-function go(key: 'shop' | 'dungeon', data: object = {}) {
+function go(key: 'shop' | 'dungeon' | 'city', data: object = {}) {
   game.scene.stop('shop');
+  game.scene.stop('city');
   game.scene.stop('dungeon');
   game.scene.start(key, data);
 }
@@ -109,7 +120,7 @@ function title() {
 function resume() {
   log('resume', { phase: S.phase });
   if (S.phase === 'tutorial') tutorialIntro();
-  else if (S.phase === 'dungeon') dungeonIntro();
+  else if (S.phase === 'dungeon') city();
   else if (S.phase === 'morning') morning();
   else if (S.phase === 'upgrade') upgrade();
   else if (S.phase === 'done') endCard();
@@ -117,7 +128,11 @@ function resume() {
 }
 
 function avatarSelect() {
+  const disposers: (() => void)[] = [];
+  let open = true;
   const pick = (a: 'male' | 'female') => {
+    open = false;
+    disposers.forEach((d) => d());
     S.avatar = a;
     save();
     sfx('tap');
@@ -125,9 +140,21 @@ function avatarSelect() {
     go('shop', { idle: true });
     interests();
   };
-  const option = (a: 'male' | 'female', label: string) =>
-    h('button', { class: 'avatar', type: 'button', onclick: () => pick(a) },
-      h('img', { src: `avatars/${a}-portrait.png`, alt: '', draggable: 'false' }), h('b', {}, label));
+  const option = (a: 'male' | 'female', label: string) => {
+    // a rendered portrait shows at once; the live 3D model fades in over it when loaded
+    const canvas = h('canvas', { class: 'av3d' });
+    const el = h('button', { class: 'avatar', type: 'button', onclick: () => pick(a) },
+      h('div', { class: 'avstage' }, h('img', { src: `avatars/${a}-portrait.png`, alt: '', draggable: 'false' }), canvas), h('b', {}, label));
+    window.setTimeout(() => {
+      if (!open) return;
+      mountViewer(canvas, `models/${a}.glb`).then((dispose) => {
+        if (!open) return dispose();
+        disposers.push(dispose);
+        el.classList.add('live');
+      }).catch(() => { /* keep the portrait */ });
+    }, 50);
+    return el;
+  };
   setModal(card('Choose your shopkeeper',
     h('p', {}, 'Who is running the shop?'),
     h('div', { class: 'avatars' }, option('male', 'Shopkeeper A'), option('female', 'Shopkeeper B'))));
@@ -185,9 +212,20 @@ function tutorialDone(d: DaySummary) {
   hooks.hud();
   setModal(card('Shop closed',
     h('p', {}, d.sales ? `You made ${d.sales} sale${d.sales > 1 ? 's' : ''} and earned ${d.revenue} coins.` : 'No sales today. Lower prices sell faster: check your notebook tomorrow.'),
-    h('p', {}, 'The shelves are nearly bare. Tonight you head into the Techno Dungeon. Everything you carry out is tomorrow’s stock.'),
-    btn('To the dungeon ▶', () => { sfx('tap'); dungeonIntro(); }, 'primary')));
+    h('p', {}, 'The shelves are nearly bare. Step out into the city: meet the neighbours, then find the old server mall in the park. Everything you carry out of the Techno Dungeon is tomorrow’s stock.'),
+    btn('Head out ▶', () => { sfx('tap'); city(); }, 'primary')));
 }
+
+// ---- evening: the city ----
+
+function city() {
+  S.phase = 'dungeon';
+  save();
+  setModal(null);
+  hud((hudLabel = `Evening ${S.day}`));
+  go('city');
+}
+hooks.cityExit = () => dungeonIntro();
 
 // ---- night: dungeon ----
 
@@ -277,7 +315,7 @@ function summary(d: DaySummary) {
   const base = { stock: d.startStock, prices: S.prices, slots: S.upgrades.shelf ? RULES.shelfSlotsUpgraded : RULES.shelfSlots };
   const walkIns = RULES.walkIns + (S.upgrades.sign ? RULES.signBonus : 0);
   const without = estimateDay({ ...base, customers: walkIns, campaign: false });
-  const withC = estimateDay({ ...base, customers: walkIns * RULES.campaignMult, campaign: true });
+  const withC = estimateDay({ ...base, customers: walkIns * RULES.campaignMult + S.partners.length * PARTNER_BONUS, campaign: true });
   const other = d.campaignUsed ? without.profit : withC.profit;
   const max = Math.max(profit, other, 1);
   const bar = (label: string, v: number, cls: string) =>
@@ -368,8 +406,8 @@ function endCard() {
   log('loop_complete', { day: S.day, coins: S.coins, xp: S.xp });
   setModal(card('Come back tomorrow',
     h('p', {}, 'That is one full loop: fight, price, sell, upgrade. In the app, play is capped at one loop a day, so the shop is always waiting tomorrow.'),
-    h('div', { class: 'stats' }, stat('Coins', S.coins), stat('Shop level', S.level), stat('Shop List', `${S.shopList.length} saved`)),
-    btn('Play the next day (demo)', () => { sfx('tap'); S.day++; S.phase = 'dungeon'; save(); dungeonIntro(); }, 'primary'),
+    h('div', { class: 'stats' }, stat('Coins', S.coins), stat('Shop level', S.level), stat('Local partners', `${S.partners.length} of ${PARTNERS.length}`), stat('Shop List', `${S.shopList.length} saved`)),
+    btn('Play the next day (demo)', () => { sfx('tap'); S.day++; S.phase = 'dungeon'; save(); city(); }, 'primary'),
     btn('Download event log', downloadLog),
     btn('Start over', () => { resetState(); title(); go('shop', { idle: true }); }, 'ghost')));
 }

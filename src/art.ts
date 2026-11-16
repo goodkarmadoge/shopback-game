@@ -253,10 +253,6 @@ function buildProps() {
     });
   coin('coin', '#ffcf40', '#d99a1f');
   coin('cbcoin', '#ff7a59', '#d6452a');
-  make('shadow', 12, 5, 2, (p) => {
-    p(2, 0, 8, 5, 'rgba(0,0,0,0.22)');
-    p(0, 1, 12, 3, 'rgba(0,0,0,0.22)');
-  });
   make('slash', 24, 24, 2, (_p, ctx) => {
     ctx.strokeStyle = '#eaffff';
     ctx.lineWidth = 8;
@@ -274,117 +270,6 @@ function buildProps() {
     p(1, 0, 4, 6, '#ffe14d'); p(0, 1, 6, 4, '#ffe14d'); p(2, 2, 2, 2, '#ffffff');
   });
   make('spark', 2, 2, 2, (p) => p(0, 0, 2, 2, '#ffffff'));
-  make('table', 22, 16, 2, (p) => {
-    p(0, 0, 22, 13, INK);
-    p(1, 1, 20, 9, '#b5672f');
-    p(1, 1, 20, 2, '#d98a45');
-    p(1, 10, 20, 2, '#7d4320');
-    p(2, 13, 2, 3, INK); p(18, 13, 2, 3, INK);
-    p(3, 4, 16, 5, '#8fc7a0');
-    p(3, 4, 16, 1, '#b8e3c3');
-  });
-}
-
-// Deterministic noise so backgrounds look the same on every load.
-function noise(seed: number) {
-  let s = seed;
-  return () => ((s = (s * 16807) % 2147483647) & 0xffff) / 0xffff;
-}
-
-function buildShop() {
-  make('shop_bg', 180, 320, 2, (p) => {
-    const n = noise(11);
-    // street
-    p(0, 255, 180, 65, '#d8c193');
-    for (let i = 0; i < 90; i++) p(Math.floor(n() * 176), 262 + Math.floor(n() * 56), 3 + Math.floor(n() * 3), 2, n() > 0.5 ? '#c9b07f' : '#e6d3a8');
-    p(0, 255, 180, 3, '#a58a5c');
-    for (let x = 6; x < 180; x += 34) {
-      p(x, 300, 14, 12, '#5d8f4e'); p(x + 2, 297, 10, 4, '#79b25f'); p(x + 5, 310, 4, 5, '#6e4a2b');
-    }
-    // floor
-    p(8, 50, 164, 205, '#dda15e');
-    for (let y = 50; y < 250; y += 8) {
-      p(8, y, 164, 1, '#c98a48');
-      for (let k = 0; k < 4; k++) p(12 + Math.floor(n() * 156), y + 1, 1, 7, '#c98a48');
-    }
-    // light pools from the windows
-    p(14, 56, 40, 26, 'rgba(255,236,170,0.28)');
-    p(126, 56, 40, 26, 'rgba(255,236,170,0.28)');
-    // rug
-    p(26, 106, 128, 96, '#3f7f72');
-    p(29, 109, 122, 90, '#58a08f');
-    p(33, 113, 114, 82, '#3f7f72');
-    p(36, 116, 108, 76, '#6fb7a4');
-    // back wall
-    p(0, 0, 180, 50, '#7a3f28');
-    for (let y = 2; y < 48; y += 6) for (let x = (y % 12 ? 0 : 6) - 6; x < 180; x += 12) p(x, y, 11, 5, '#8d4a2f');
-    p(0, 46, 180, 4, '#4f2618');
-    // windows
-    for (const x of [18, 138]) {
-      p(x - 1, 17, 26, 22, '#4f2618'); p(x, 18, 24, 20, '#ffe9a8'); p(x + 11, 18, 2, 20, '#4f2618'); p(x, 27, 24, 2, '#4f2618');
-    }
-    // wall shelves with wares
-    for (const x of [52, 100]) {
-      p(x, 30, 28, 3, '#4f2618');
-      p(x + 2, 22, 5, 8, '#35e0ff'); p(x + 10, 24, 6, 6, '#f2c14e'); p(x + 19, 21, 5, 9, '#c63fd9');
-      p(x, 16, 28, 2, '#4f2618');
-      p(x + 4, 10, 7, 6, '#6dff9c'); p(x + 16, 11, 8, 5, '#ff7a59');
-    }
-    // side and front walls
-    p(0, 50, 8, 205, '#5c2e1c'); p(172, 50, 8, 205, '#5c2e1c');
-    p(0, 247, 72, 9, '#5c2e1c'); p(108, 247, 72, 9, '#5c2e1c');
-    p(72, 247, 36, 9, '#b98a55');
-    p(74, 240, 32, 7, '#c4473a'); p(76, 242, 28, 3, '#e2695b');
-    // counter
-    p(48, 58, 84, 15, INK);
-    p(49, 59, 82, 6, '#e0a868'); p(49, 65, 82, 7, '#8a4b2d');
-    for (let x = 56; x < 130; x += 12) p(x, 66, 1, 5, '#6e3a22');
-    p(104, 51, 16, 9, INK); p(105, 52, 14, 7, '#f2c14e'); p(107, 53, 10, 3, '#fff1b8');
-    p(56, 54, 6, 5, '#c63fd9'); p(64, 55, 5, 4, '#35e0ff');
-    // potted plants
-    for (const x of [12, 160]) {
-      p(x, 236, 8, 8, '#a8552f'); p(x - 2, 226, 12, 11, '#4f9a53'); p(x, 223, 8, 5, '#6cc070');
-    }
-  });
-}
-
-function buildDungeon() {
-  const accents = ['#35e0ff', '#ff6ad5', '#ffb347'];
-  for (let room = 0; room < 3; room++) {
-    make(`dungeon_bg_${room}`, 180, 320, 2, (p) => {
-      const n = noise(31 + room * 7);
-      const ac = accents[room];
-      p(0, 0, 180, 320, '#090a18');
-      // floor: the room fills the screen; touch controls float over the lower part
-      p(12, 36, 156, 268, '#12142e');
-      for (let y = 36; y < 304; y += 12) p(12, y, 156, 1, '#1d2250');
-      for (let x = 12; x < 168; x += 12) p(x, 36, 1, 268, '#1d2250');
-      for (let i = 0; i < 24; i++) {
-        const tx = 12 + Math.floor(n() * 13) * 12;
-        const ty = 36 + Math.floor(n() * 22) * 12;
-        p(tx + 1, ty + 1, 11, 11, n() > 0.5 ? '#171a3a' : '#0f1126');
-        if (n() > 0.6) p(tx + 5, ty + 5, 2, 2, ac);
-      }
-      // cable runs
-      p(12, 120, 156, 1, '#262b5e'); p(12, 228, 156, 1, '#262b5e'); p(90, 36, 1, 268, '#262b5e');
-      // back wall of server racks
-      p(0, 18, 180, 18, '#1a1d3d');
-      for (let x = 4; x < 176; x += 14) {
-        if (x > 74 && x < 100) continue;
-        p(x, 20, 12, 15, '#0d0f22');
-        for (let y = 22; y < 34; y += 3) {
-          p(x + 2, y, 5, 1, '#2c3270');
-          p(x + 9, y, 1, 1, n() > 0.5 ? ac : '#6dff9c');
-        }
-      }
-      // exit door
-      p(78, 18, 24, 18, ac); p(80, 20, 20, 16, '#090a18'); p(82, 22, 16, 14, '#1b1f47'); p(89, 26, 2, 6, ac);
-      // side and bottom walls
-      p(0, 36, 12, 276, '#1a1d3d'); p(168, 36, 12, 276, '#1a1d3d');
-      p(10, 36, 2, 268, ac); p(168, 36, 2, 268, ac);
-      p(0, 304, 180, 16, '#1a1d3d'); p(12, 304, 156, 1, ac);
-    });
-  }
 }
 
 export function buildArt() {
@@ -392,6 +277,4 @@ export function buildArt() {
   buildEnemies();
   buildItems();
   buildProps();
-  buildShop();
-  buildDungeon();
 }

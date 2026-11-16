@@ -10,6 +10,7 @@ type Kind = 'bot' | 'drone' | 'slime' | 'guardian';
 interface Enemy {
   kind: Kind;
   sp: Phaser.GameObjects.Sprite;
+  sh: Phaser.GameObjects.Image;
   x: number;
   y: number;
   hp: number;
@@ -90,10 +91,11 @@ export class DungeonScene extends Phaser.Scene {
     this.chest = null;
     resetInput();
 
-    this.bg = this.add.image(0, 0, 'dungeon_bg_0').setOrigin(0).setDepth(-10);
+    this.cameras.main.setZoom(2).centerOn(180, 320);
+    this.bg = this.add.image(0, 0, 'dungeon_bg_0').setOrigin(0).setScale(0.5).setDepth(-10);
     this.gfx = this.add.graphics().setDepth(-5);
-    this.shadow = this.add.image(0, 0, 'shadow');
-    this.hero = this.add.sprite(180, 520, `av_${S.avatar}`, 0);
+    this.shadow = this.add.image(0, 0, 'shadow').setScale(0.5);
+    this.hero = this.add.sprite(180, 520, `av_${S.avatar}`, 0).setScale(0.6);
     this.input.on('pointerdown', () => press('attack'));
     setSheet(buildControls());
     this.events.once('shutdown', () => {
@@ -125,7 +127,8 @@ export class DungeonScene extends Phaser.Scene {
   private spawn(kind: Kind, x: number, y: number, small = false): Enemy {
     const sp = this.add.sprite(x, y, `${kind}_0`).play(kind);
     if (small) sp.setScale(0.65);
-    const e: Enemy = { kind, sp, x, y, hp: STATS[kind].hp, r: small ? 8 : STATS[kind].r, t: -rnd(0.3, 0.9), st: 'idle', dx: 0, dy: 1, kx: 0, ky: 0, flash: 0, small };
+    const sh = this.add.image(x, y, 'shadow').setScale(kind === 'guardian' ? 1 : small ? 0.35 : 0.55);
+    const e: Enemy = { kind, sp, sh, x, y, hp: STATS[kind].hp, r: small ? 8 : STATS[kind].r, t: -rnd(0.3, 0.9), st: 'idle', dx: 0, dy: 1, kx: 0, ky: 0, flash: 0, small };
     this.enemies.push(e);
     return e;
   }
@@ -235,7 +238,7 @@ export class DungeonScene extends Phaser.Scene {
     // the avatar sheet has 8 facing rows (0 = toward the camera, turning clockwise) x 6 walk frames
     const dir = (Math.round(Math.atan2(-p.fx, p.fy) / (Math.PI / 4)) + 8) % 8;
     const step = moving && p.roll <= 0 ? Math.floor(this.time.now / 90) % 6 : 0;
-    this.hero.setFrame(dir * 6 + step).setPosition(p.x, p.y - 14).setDepth(p.y);
+    this.hero.setFrame(dir * 6 + step).setPosition(p.x, p.y - 20).setDepth(p.y);
     this.hero.setAngle(p.roll > 0 ? (1 - p.roll / 0.26) * 360 * (p.fx < 0 ? -1 : 1) : 0);
     this.hero.setAlpha(p.inv > 0 && p.roll <= 0 ? 0.55 : 1);
     this.shadow.setPosition(p.x, p.y + 6).setDepth(p.y - 1);
@@ -311,6 +314,7 @@ export class DungeonScene extends Phaser.Scene {
 
   private remove(e: Enemy) {
     e.sp.destroy();
+    e.sh.destroy();
     this.enemies.splice(this.enemies.indexOf(e), 1);
   }
 
@@ -433,6 +437,7 @@ export class DungeonScene extends Phaser.Scene {
     e.x = Phaser.Math.Clamp(e.x, B.x0 + e.r - 8, B.x1 - e.r + 8);
     e.y = Phaser.Math.Clamp(e.y, B.y0 + e.r - 8, B.y1 - e.r + 8);
     e.sp.setPosition(e.x, e.y - (e.kind === 'drone' ? 14 : 6)).setDepth(e.y).setFlipX(dx < 0);
+    e.sh.setPosition(e.x, e.y + (e.kind === 'guardian' ? 20 : 9)).setDepth(e.y - 1);
     if (e.kind === 'guardian') e.sp.setAngle(e.st === 'stun' ? Math.sin(this.time.now / 90) * 6 : 0);
   }
 

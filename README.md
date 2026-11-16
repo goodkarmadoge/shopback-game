@@ -24,12 +24,13 @@ npm run build
 
 1. Choose a shopkeeper, then tap three things you are shopping for.
 2. **Tutorial day:** three starter items, two customers. Set prices and barter once.
-3. **Night:** three rooms of the Techno Dungeon. Fill a six-slot loot bag.
-4. **Offer card:** one skippable, sponsored example deal picked from your interests.
-5. **Morning:** price last night's loot.
-6. **Shop day:** customers react, buy, barter or leave. Start the ShopBack campaign once for 3x customers and 10% cashback per sale.
-7. **Close:** revenue, cashback and profit, next to an estimate of the day without the campaign.
-8. **Upgrade,** then the "come back tomorrow" card.
+3. **Evening:** walk the City. Partner with local businesses on your street, then find the old server mall in the park.
+4. **Night:** three rooms of the Techno Dungeon. Fill a six-slot loot bag.
+5. **Offer card:** one skippable, sponsored example deal picked from your interests.
+6. **Morning:** price last night's loot.
+7. **Shop day:** customers react, buy, barter or leave. Start the ShopBack campaign once for 3x customers and 10% cashback per sale.
+8. **Close:** revenue, cashback and profit, next to an estimate of the day without the campaign.
+9. **Upgrade,** then the "come back tomorrow" card.
 
 Controls in the dungeon: virtual stick and two buttons on touch; WASD or arrows, J or click to attack, K or space to dodge on desktop.
 
@@ -49,17 +50,27 @@ Simulates 1,000 shop days per price point and fails if a campaign day does not b
 | `src/scenes/ShopScene.ts` | The shop day: customers, shelves, bartering, campaign |
 | `src/scenes/DungeonScene.ts` | Combat, enemies, loot bag |
 | `src/main.ts` | The flow between screens: onboarding, results, offer card, summary, upgrades |
-| `src/art.ts` | Pixel art, drawn in code |
+| `src/scenes/CityScene.ts` | The City hub: walk around, partner with businesses, enter the dungeon |
+| `src/art.ts` | Pixel-art sprites (customers, enemies, items), drawn in code |
+| `src/scenery.ts` | Painted shop, dungeon and city backdrops, drawn in code at 2x |
+| `src/viewer3d.ts` | Live three.js preview of the shopkeeper models on the select screen |
 | `src/audio.ts` | Synthesised music and sound effects |
 | `src/style.css` | UI styling. ShopBack-style colour tokens are at the top. |
 | `src/offers.json` | Mock offer cards (invented merchants) |
 | `src/lines.json` | Pre-generated barter dialogue |
-| `assets-src/models/` | Shopkeeper 3D models (GLB, rigged, with a walk cycle) |
+| `public/models/` | Shopkeeper 3D models (GLB, rigged, with a walk cycle) |
 | `public/avatars/` | Sprite sheets and portraits rendered from those models |
+| `assets-src/city/` | City buildings and props (GLB), from the Operation: Merlion project |
+| `public/city/` | Sprites rendered from those models |
 
-## Shopkeeper avatars
+## 3D assets
 
-The two shopkeepers are 3D models generated with Higgsfield (concept image, then image-to-3D with rigging and a walk animation). The game stays 2D: `scripts/render-avatars.cjs` renders each model from 8 directions across 6 walk frames into a 48px sprite sheet, so the download stays small. To re-render after changing a model:
+The world is 2D, drawn at 720x1280 for a 360x640 play area, so 3D-rendered art keeps its detail.
+
+- **Shopkeepers:** two models generated with Higgsfield (concept image, then image-to-3D with rigging and a walk animation). The select screen shows them live in three.js. In play, each is a sprite sheet rendered from the model: 8 directions by 6 walk frames.
+- **City:** shophouses, the Merlion, Marina Bay Sands, supertrees, trees and street props come from the Operation: Merlion project's models, rendered to sprites from the game's camera angle.
+
+To re-render after changing a model, start the dev server, then run the scripts:
 
 ```bash
 npm run dev -- --port 5199
@@ -67,6 +78,10 @@ npm run dev -- --port 5199
 
 ```bash
 node scripts/render-avatars.cjs
+```
+
+```bash
+node scripts/render-city.cjs
 ```
 
 ## Prototype limits
