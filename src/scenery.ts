@@ -545,7 +545,26 @@ function buildCity() {
   vignette(c, 0, 0, 360, CITY_H, 0.22, '20,30,50');
 }
 
+function buildPillar() {
+  const cv = document.createElement('canvas');
+  cv.width = 84;
+  cv.height = 108;
+  const c = cv.getContext('2d')!;
+  c.scale(2, 2);
+  contact(c, 21, 46, 24, 0.5);
+  rect(c, 1, 0, 40, 22, '#3a4468');
+  rect(c, 1, 0, 40, 22, linear(c, 0, 0, 0, 22, [0, 'rgba(255,255,255,0.18)'], [1, 'rgba(0,0,0,0.1)']));
+  rect(c, 1, 22, 40, 26, linear(c, 0, 22, 0, 48, [0, '#1c2238'], [1, '#0d1020']));
+  for (let y = 25; y < 46; y += 5) {
+    rect(c, 4, y, 34, 3.2, '#1a2040');
+    rect(c, 33, y + 1, 2, 1.2, y % 10 ? '#35e0ff' : '#6dff9c');
+  }
+  rect(c, 1, 21, 40, 1, '#05060c');
+  ART.pillar = cv;
+}
+
 export function buildScenery() {
+  buildPillar();
   buildShop();
   buildTable();
   buildShadow();

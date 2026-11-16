@@ -217,6 +217,38 @@ function buildItems() {
   });
 }
 
+function buildSpecials() {
+  make('item_chip', 16, 16, 2, (p) => {
+    p(2, 2, 12, 12, INK);
+    p(3, 3, 10, 10, '#f2c14e');
+    p(3, 3, 10, 2, '#fff1b8');
+    p(5, 5, 6, 6, '#b8862e');
+    p(6, 6, 4, 4, '#ffe14d');
+    for (const i of [4, 7, 10]) { p(i, 0, 1, 2, '#f2c14e'); p(i, 14, 1, 2, '#f2c14e'); p(0, i, 2, 1, '#f2c14e'); p(14, i, 2, 1, '#f2c14e'); }
+    p(7, 7, 2, 2, '#ffffff');
+  });
+  make('item_prism', 16, 16, 2, (p) => {
+    for (let dy = 0; dy < 13; dy++) {
+      const w = dy < 4 ? 4 + dy * 2 : 12 - (dy - 4) * 1.4;
+      p(8 - w / 2 - 1, 1 + dy, w + 2, 1.5, INK);
+    }
+    for (let dy = 0; dy < 12; dy++) {
+      const w = dy < 4 ? 4 + dy * 2 : 12 - (dy - 4) * 1.5;
+      const x = 8 - w / 2;
+      p(x, 2 + dy, w / 3, 1, '#ff6ad5');
+      p(x + w / 3, 2 + dy, w / 3, 1, '#b8f5ff');
+      p(x + (2 * w) / 3, 2 + dy, w / 3, 1, '#7a6bff');
+    }
+    p(6, 3, 2, 2, '#ffffff');
+  });
+  make('arrow', 10, 3, 2, (p) => {
+    p(0, 1, 7, 1, '#eaffff');
+    p(6, 0, 2, 3, '#35e0ff');
+    p(8, 1, 2, 1, '#ffffff');
+    p(0, 0, 1, 3, '#ff6ad5');
+  });
+}
+
 function buildProps() {
   for (const f of [0, 1]) {
     make(`chest_${f}`, 16, 16, 2, (p) => {
@@ -277,4 +309,5 @@ export function buildArt() {
   buildEnemies();
   buildItems();
   buildProps();
+  buildSpecials();
 }

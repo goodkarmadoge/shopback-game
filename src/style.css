@@ -363,3 +363,12 @@ input[type='range'].heat::-moz-range-thumb { width: 1.3em; height: 1.3em; border
 .roomno { font-weight: 600; }
 .citylabel { font-weight: 600; font-size: 0.66em; }
 .toastmsg { font-weight: 600; font-size: 0.86em; }
+
+/* unlocks and the bow */
+.reward { display: flex; align-items: center; gap: 0.7em; background: #fff6e0; border: 0.12em dashed var(--sb-yellow); border-radius: 0.9em; padding: 0.6em 0.8em; margin: 0.2em 0 0.6em; }
+.reward > span { font-size: 1.9em; line-height: 1; }
+.reward b { font-family: var(--display); font-weight: 600; display: block; line-height: 1.2; }
+.reward small { display: block; line-height: 1.35; color: var(--sb-ink-2); }
+.reward.new { background: var(--sb-green-bg); border: 0.12em solid var(--sb-green); animation: starin 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.7s both; }
+.act.bow { width: 4.2em; height: 4.2em; background: rgba(255, 184, 28, 0.3); font-size: 0.85em; margin-bottom: 4.6em; margin-right: -4.4em; }
+.act.bow small { font-size: 0.6em; }

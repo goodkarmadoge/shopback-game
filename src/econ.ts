@@ -1,6 +1,6 @@
 // Pure game rules. No DOM, no Phaser: the game and the balance simulation both import this.
 
-export type ItemId = 'gear' | 'cell' | 'gel' | 'lens' | 'core';
+export type ItemId = 'gear' | 'cell' | 'gel' | 'lens' | 'core' | 'chip' | 'prism';
 export type Rarity = 'Common' | 'Uncommon' | 'Rare';
 
 export interface ItemDef {
@@ -18,8 +18,13 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   gel: { name: 'Glitch Gel', value: 55, rarity: 'Uncommon', source: 'Glitch Slime', sliderMax: 150, step: 5 },
   lens: { name: 'Neon Lens', value: 70, rarity: 'Uncommon', source: 'Loot chest', sliderMax: 200, step: 5 },
   core: { name: 'Rare Core', value: 160, rarity: 'Rare', source: 'Vault Guardian', sliderMax: 400, step: 5 },
+  // special loot, only found in the Daily Dungeon
+  chip: { name: 'Gold Chip', value: 220, rarity: 'Rare', source: 'Daily Dungeon', sliderMax: 520, step: 5 },
+  prism: { name: 'Prism Shard', value: 320, rarity: 'Rare', source: 'Daily Dungeon', sliderMax: 760, step: 5 },
 };
 export const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
+/** What customers ask for by default; special loot is only asked for when it is in stock. */
+export const BASE_IDS: ItemId[] = ['gear', 'cell', 'gel', 'lens', 'core'];
 
 export type CType = 'hunter' | 'collector' | 'rusher';
 
@@ -88,11 +93,11 @@ export interface Customer {
 
 const pick = <T>(arr: readonly T[], rng: Rng): T => arr[Math.floor(rng() * arr.length)];
 
-export function makeCustomer(rng: Rng): Customer {
+export function makeCustomer(rng: Rng, pool: ItemId[] = BASE_IDS): Customer {
   const t = rng();
   const type: CType = t < 0.4 ? 'hunter' : t < 0.8 ? 'rusher' : 'collector';
   // Collectors only care about the scarcer finds.
-  const wants = type === 'collector' ? pick(['gel', 'lens', 'core'] as const, rng) : pick(ITEM_IDS, rng);
+  const wants = type === 'collector' ? pick(pool.filter((i) => ITEMS[i].rarity !== 'Common'), rng) : pick(pool, rng);
   return { type, wants };
 }
 

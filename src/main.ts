@@ -14,6 +14,7 @@ import { ShopScene } from './scenes/ShopScene';
 import { CITY_SPRITES, CityScene, PARTNERS, PARTNER_BONUS } from './scenes/CityScene';
 import { DungeonScene } from './scenes/DungeonScene';
 import offerData from './offers.json';
+import { INTRO, UNLOCK_INFO, Unlock } from './levels';
 
 // ---- boot ----
 
@@ -36,7 +37,7 @@ class BootScene extends Phaser.Scene {
       this.anims.create({ key: k, frames: [{ key: `${k}_0` }, { key: `${k}_1` }], frameRate: k === 'drone' ? 12 : 5, repeat: -1 });
     }
     // painted backdrops and 3D-rendered sprites are high resolution: smooth them, keep pixel art crisp
-    const smooth = ['shop_bg', 'city_bg', 'dungeon_bg_0', 'dungeon_bg_1', 'dungeon_bg_2', 'table', 'shadow', 'av_male', 'av_female', ...CITY_SPRITES.map((k) => `city_${k}`)];
+    const smooth = ['pillar', 'shop_bg', 'city_bg', 'dungeon_bg_0', 'dungeon_bg_1', 'dungeon_bg_2', 'table', 'shadow', 'av_male', 'av_female', ...CITY_SPRITES.map((k) => `city_${k}`)];
     for (const k of smooth) this.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
     this.scene.start('shop', { idle: true });
     title();
@@ -254,30 +255,59 @@ hooks.cityExit = () => dungeonIntro();
 function dungeonIntro() {
   go('shop', { idle: true });
   hud((hudLabel = `Night ${S.day}`));
-  setModal(card('Techno Dungeon',
-    h('p', {}, 'An abandoned server mall under the market street. Three rooms, five hearts, a six-slot loot bag.'),
+  const daily = S.dungeonLevel >= INTRO.length;
+  const level = INTRO[Math.min(S.dungeonLevel, INTRO.length - 1)];
+  const reward = !daily && level.unlock ? UNLOCK_INFO[level.unlock] : null;
+  setModal(h('div', { class: 'card pop' },
+    daily
+      ? hero('Daily Dungeon', 'Today’s run', 'A fresh layout every day. Pillars for cover, four rooms, and loot you cannot find anywhere else.')
+      : hero(`Level ${S.dungeonLevel + 1} of ${INTRO.length}`, level.title, level.blurb),
+    daily
+      ? h('div', { class: 'reward' }, h('span', {}, '💎'), h('div', {}, h('b', {}, 'Special loot'), h('small', {}, 'Gold Chips and Prism Shards sell for far more than anything else.')))
+      : reward && h('div', { class: 'reward' }, h('span', {}, reward.emoji), h('div', {}, h('b', {}, `Clear it to unlock: ${reward.name}`), h('small', {}, reward.text))),
     h('div', { class: 'keys' },
-      stat('Move', 'Stick · WASD / arrows'),
-      stat('Attack', 'Button · J / click'),
-      stat('Dodge roll', 'Button · K / space')),
-    h('p', { class: 'fine' }, 'Three hits make a combo: the third lands harder. Rolling makes you untouchable for a moment. Red shapes show where an attack will land.'),
-    btn('Enter ▶', () => { sfx('tap'); setModal(null); go('dungeon'); }, 'primary')));
+      stat('Move', 'Stick · WASD'),
+      stat('Attack', S.unlocks.auto ? 'Automatic · J' : 'Button · J'),
+      stat('Dodge roll', 'Button · K'),
+      S.unlocks.bow ? stat('Bow', 'Drag to aim · L') : null),
+    h('p', { class: 'fine' }, 'Five hearts, six bag slots. Red shapes show where an attack will land.'),
+    btn('Enter ▶', () => { sfx('tap'); setModal(null); go('dungeon', { daily }); }, 'primary')));
 }
 
 hooks.runEnded = (r: RunSummary) => {
   go('shop', { idle: true });
   S.stock.push(...r.bag);
   S.phase = 'morning';
+  // clearing an introduction level moves you on and may unlock something
+  let unlocked: Unlock | undefined;
+  const levelBonus = r.complete ? 30 : 0;
+  S.xp += levelBonus;
+  if (r.complete && !r.daily && S.dungeonLevel < INTRO.length) {
+    unlocked = INTRO[S.dungeonLevel].unlock;
+    S.dungeonLevel++;
+    if (unlocked === 'auto') S.unlocks.auto = true;
+    if (unlocked === 'bow') S.unlocks.bow = true;
+    log('level_cleared', { level: S.dungeonLevel, unlocked });
+  }
   save();
   hud((hudLabel = `Night ${S.day}`));
-  setModal(card(r.defeated ? 'Defeated' : r.rooms === 3 ? 'Dungeon cleared!' : 'Back safely',
-    h('p', {}, r.defeated
-      ? `You were carried out after ${r.rooms} room${r.rooms === 1 ? '' : 's'} and dropped half your bag on the way.`
-      : `You cleared ${r.rooms} of 3 rooms.`),
-    h('div', { class: 'stats' }, stat('Rooms cleared', `${r.rooms} / 3`), stat('XP earned', `+${r.rooms * RULES.xpRoom}`), stat('Loot carried out', r.bag.length)),
+  const rating = r.defeated ? 0 : r.complete ? 3 : r.rooms >= r.total / 2 ? 2 : 1;
+  const info = unlocked ? UNLOCK_INFO[unlocked] : null;
+  if (r.complete) sfx('level');
+  setModal(h('div', { class: 'card pop' },
+    hero(r.daily ? 'Daily Dungeon' : `Level ${S.dungeonLevel + (r.complete ? 0 : 1)}`,
+      r.defeated ? 'Knocked out!' : r.complete ? 'CLEARED!' : 'Back safely',
+      r.defeated ? 'You were carried out and dropped half your bag on the way.' : r.complete ? undefined : 'Clear every room to finish the level.'),
+    stars(rating),
+    h('div', { class: 'tiles' },
+      h('span', {}, h('b', {}, `${r.rooms}/${r.total}`), h('small', {}, 'Rooms')),
+      h('span', {}, h('b', {}, `+${r.rooms * RULES.xpRoom + levelBonus}`), h('small', {}, 'XP')),
+      h('span', {}, h('b', {}, r.bag.length), h('small', {}, 'Loot'))),
+    info && h('div', { class: 'reward new' }, h('span', {}, info.emoji), h('div', {}, h('b', {}, `Unlocked: ${info.name}`), h('small', {}, info.text))),
     r.bag.length ? lootRow(r.bag) : h('p', { class: 'fine' }, 'Your bag is empty.'),
     r.lost.length ? h('p', { class: 'fine' }, `Lost: ${r.lost.map((i) => ITEMS[i].name).join(', ')}`) : null,
     btn('Continue ▶', () => { sfx('tap'); offerCard(); }, 'primary')));
+  if (r.complete) confetti(unlocked ? 48 : 30);
 };
 
 // ---- the offer card: one per run, after the loot is counted, always skippable ----
@@ -441,7 +471,7 @@ function endCard() {
   log('loop_complete', { day: S.day, coins: S.coins, xp: S.xp });
   setModal(h('div', { class: 'card pop' },
     hero('Loop complete', 'See you tomorrow!', 'Fight, price, sell, upgrade: that is one full loop. In the app, play is capped at one loop a day, so the shop is always waiting.'),
-    h('div', { class: 'stats' }, stat('Coins', S.coins), stat('Shop level', S.level), stat('Local partners', `${S.partners.length} of ${PARTNERS.length}`), stat('Shop List', `${S.shopList.length} saved`)),
+    h('div', { class: 'stats' }, stat('Coins', S.coins), stat('Shop level', S.level), stat('Dungeon', S.dungeonLevel >= INTRO.length ? 'Daily unlocked' : `Level ${S.dungeonLevel} of ${INTRO.length}`), stat('Local partners', `${S.partners.length} of ${PARTNERS.length}`), stat('Shop List', `${S.shopList.length} saved`)),
     btn('Play the next day ▶', () => { sfx('tap'); S.day++; S.phase = 'dungeon'; save(); city(); }, 'primary'),
     btn('Download event log', downloadLog),
     btn('Start over', () => { resetState(); title(); go('shop', { idle: true }); }, 'ghost')));

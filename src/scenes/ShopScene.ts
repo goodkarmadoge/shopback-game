@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import {
-  Barter, CTYPES, Customer, ITEMS, ItemId, RULES, approach, barterStep, makeCustomer, reaction, startBarter, takeForShelf,
+  BASE_IDS, Barter, CTYPES, Customer, ITEMS, ItemId, RULES, approach, barterStep, makeCustomer, reaction, startBarter, takeForShelf,
 } from '../econ';
 import { S, hooks, log, save } from '../state';
 import { btn, floatAt, floatLayer, h, icon, place, setModal, setSheet } from '../ui';
@@ -204,6 +204,11 @@ export class ShopScene extends Phaser.Scene {
 
   // ---- helpers ----
 
+  /** Customers ask for the usual items, plus any special loot that is in stock today. */
+  private pool(): ItemId[] {
+    return [...new Set([...BASE_IDS, ...this.startStock])];
+  }
+
   private wait(ms: number) {
     return new Promise<void>((res) => this.time.delayedCall(ms, () => res()));
   }
@@ -260,7 +265,7 @@ export class ShopScene extends Phaser.Scene {
     const walkIns = RULES.walkIns + (S.upgrades.sign ? RULES.signBonus : 0);
     this.queue = this.tutorial
       ? [{ type: 'rusher', wants: 'gear' }, { type: 'hunter', wants: 'cell' }]
-      : Array.from({ length: walkIns }, () => makeCustomer(Math.random));
+      : Array.from({ length: walkIns }, () => makeCustomer(Math.random, this.pool()));
     this.total = this.queue.length;
     this.refresh();
     await this.wait(1200);
@@ -462,7 +467,7 @@ export class ShopScene extends Phaser.Scene {
     this.campaign = true;
     // partner businesses send their regulars too
     const extra = this.queue.length * (RULES.campaignMult - 1) + S.partners.length * PARTNER_BONUS;
-    for (let i = 0; i < extra; i++) this.queue.push(makeCustomer(Math.random));
+    for (let i = 0; i < extra; i++) this.queue.push(makeCustomer(Math.random, this.pool()));
     this.total += extra;
     sfx('campaign');
     log('campaign_start', { arrived: this.arrived, extra });

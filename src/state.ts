@@ -25,9 +25,12 @@ export interface State {
   muted: boolean;
   avatar: 'male' | 'female';
   partners: string[];
+  /** Introduction levels cleared, 0 to 5. After 5 the Daily Dungeon opens. */
+  dungeonLevel: number;
+  unlocks: { auto: boolean; bow: boolean };
 }
 
-const SAVE_KEY = 'shopkeeper-save-v1';
+const SAVE_KEY = 'shopkeeper-save-v2';
 const LOG_KEY = 'shopkeeper-log-v1';
 
 const byItem = <T>(f: (id: ItemId) => T) => Object.fromEntries(ITEM_IDS.map((id) => [id, f(id)])) as Record<ItemId, T>;
@@ -48,6 +51,8 @@ export function fresh(): State {
     muted: false,
     avatar: 'male',
     partners: [],
+    dungeonLevel: 0,
+    unlocks: { auto: false, bow: false },
   };
 }
 
@@ -123,7 +128,11 @@ export interface RunSummary {
   bag: ItemId[];
   lost: ItemId[];
   rooms: number;
+  total: number;
   defeated: boolean;
+  /** Every room cleared and the player walked out. */
+  complete: boolean;
+  daily: boolean;
 }
 export const hooks = {
   dayEnded: (_: DaySummary) => {},

@@ -25,12 +25,18 @@ npm run build
 1. Choose a shopkeeper, then tap three things you are shopping for.
 2. **Tutorial day:** three starter items, two customers. Set prices and barter once.
 3. **Evening:** walk the City. Partner with local businesses on your street, then find the old server mall in the park.
-4. **Night:** three rooms of the Techno Dungeon. Fill a six-slot loot bag.
+4. **Night:** one dungeon level. Fill a six-slot loot bag.
 5. **Offer card:** one skippable, sponsored example deal picked from your interests.
 6. **Morning:** price last night's loot.
-7. **Shop day:** customers react, buy, barter or leave. Start the ShopBack campaign once for 3x customers and 10% cashback per sale.
+7. **Shop day:** walk the shop, restock empty shelves by walking up to them, and haggle. Hit the ShopBack button (top right) once for 3x customers and 10% cashback per sale.
 8. **Close:** revenue, cashback and profit, next to an estimate of the day without the campaign.
 9. **Upgrade,** then the "come back tomorrow" card.
+
+## Dungeon progression
+
+- **Five introduction levels**, one per night. Level 1 unlocks auto attack, Level 3 unlocks the bow (drag the bow button to aim, release to fire; L on desktop), Level 5 is the Vault Guardian.
+- **Daily Dungeon** opens after Level 5: four rooms generated from the date, with pillars for cover and special loot (Gold Chip, Prism Shard) that sells for far more.
+- Levels live in `src/levels.ts`.
 
 Controls in the dungeon: virtual stick and two buttons on touch; WASD or arrows, J or click to attack, K or space to dodge on desktop.
 

@@ -105,7 +105,7 @@ export class CityScene extends Phaser.Scene {
     }
     this.label('Your shop', SHOP_X, 342, true);
     this.spots.push({ x: 180, y: 300, r: 44, label: 'The Merlion', act: () => toast('The Merlion keeps watch over the bay.') });
-    this.spots.push({ x: 180, y: 792, r: 40, label: 'Enter the Techno Dungeon ▶', act: () => this.leave() });
+    this.spots.push({ x: 180, y: 792, r: 40, label: S.dungeonLevel >= 5 ? 'Enter the Daily Dungeon ▶' : `Enter the dungeon · Level ${S.dungeonLevel + 1} ▶`, act: () => this.leave() });
     this.label('Techno Dungeon', 180, 776, true);
 
     this.shadow = this.add.image(0, 0, 'shadow').setScale(0.5);

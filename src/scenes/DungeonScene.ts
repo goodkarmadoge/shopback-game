@@ -2,10 +2,10 @@ import Phaser from 'phaser';
 import { ITEMS, ItemId, RULES } from '../econ';
 import { S, hooks, log, save } from '../state';
 import { btn, card, floatAt, floatLayer, h, icon, place, setHud, setModal, setSheet } from '../ui';
-import { axis, buildControls, consume, press, resetInput } from '../input';
+import { aiming, axis, buildControls, consume, press, resetInput, takeShot } from '../input';
+import { Block, INTRO, Kind, RoomDef, dailyDungeon } from '../levels';
 import { music, sfx } from '../audio';
 
-type Kind = 'bot' | 'drone' | 'slime' | 'guardian';
 
 interface Enemy {
   kind: Kind;
@@ -44,11 +44,6 @@ interface Bullet {
 }
 
 const B = { x0: 34, x1: 326, y0: 88, y1: 594 };
-const ROOMS: { name: string; spawns: [Kind, number, number][]; chest: ItemId[] }[] = [
-  { name: 'Room 1 · Scrap Bots', spawns: [['bot', 110, 200], ['bot', 250, 200]], chest: ['lens'] },
-  { name: 'Room 2 · The Server Floor', spawns: [['bot', 80, 220], ['bot', 280, 220], ['drone', 180, 130], ['slime', 180, 300]], chest: ['lens'] },
-  { name: 'Room 3 · Vault Guardian', spawns: [['guardian', 180, 200]], chest: ['lens', 'cell'] },
-];
 const STATS: Record<Kind, { hp: number; r: number }> = {
   bot: { hp: 3, r: 12 }, drone: { hp: 2, r: 10 }, slime: { hp: 4, r: 12 }, guardian: { hp: 12, r: 22 },
 };
@@ -73,13 +68,31 @@ export class DungeonScene extends Phaser.Scene {
   private chest: { sp: Phaser.GameObjects.Image; open: boolean } | null = null;
   private choice?: HTMLElement;
   private bossMax = STATS.guardian.hp;
+  private plan: RoomDef[] = [];
+  private daily = false;
+  private levelName = '';
+  private blocks: Block[] = [];
+  private blockSprites: Phaser.GameObjects.Image[] = [];
+  private arrows: Bullet[] = [];
+  private autoCd = 0;
+  private bowCd = 0;
 
   constructor() {
     super('dungeon');
   }
 
+  init(data: { daily?: boolean }) {
+    this.daily = !!data.daily;
+  }
+
   create() {
     music('dungeon');
+    const level = INTRO[Math.min(S.dungeonLevel, INTRO.length - 1)];
+    this.plan = this.daily ? dailyDungeon() : level.rooms;
+    this.levelName = this.daily ? 'Daily Dungeon' : `Level ${S.dungeonLevel + 1}`;
+    this.arrows = [];
+    this.blockSprites = [];
+    this.autoCd = this.bowCd = 0;
     this.room = 0;
     this.cleared = 0;
     this.bag = [];
@@ -97,20 +110,26 @@ export class DungeonScene extends Phaser.Scene {
     this.shadow = this.add.image(0, 0, 'shadow').setScale(0.5);
     this.hero = this.add.sprite(180, 520, `av_${S.avatar}`, 0).setScale(0.6);
     this.input.on('pointerdown', () => press('attack'));
-    setSheet(buildControls());
+    setSheet(buildControls(S.unlocks.bow));
     this.events.once('shutdown', () => {
       this.choice?.remove();
       setSheet(null);
     });
     this.enterRoom(0);
-    log('run_start', { day: S.day });
+    log('run_start', { day: S.day, level: this.levelName });
   }
 
   // ---- rooms ----
 
   private enterRoom(i: number) {
     this.room = i;
-    this.bg.setTexture(`dungeon_bg_${i}`);
+    const def = this.plan[i];
+    this.bg.setTexture(`dungeon_bg_${def.bg}`);
+    this.arrows.forEach((k) => k.sp.destroy());
+    this.arrows = [];
+    this.blockSprites.forEach((b) => b.destroy());
+    this.blocks = def.blocks;
+    this.blockSprites = def.blocks.map((b) => this.add.image(b.x + b.w / 2, b.y + b.h, 'pillar').setOrigin(0.5, 1).setScale(0.5).setDepth(b.y + b.h));
     this.pickups.forEach((k) => k.sp.destroy());
     this.bullets.forEach((k) => k.sp.destroy());
     this.pickups = [];
@@ -119,8 +138,8 @@ export class DungeonScene extends Phaser.Scene {
     this.chest = null;
     this.choice?.remove();
     Object.assign(this.p, { x: 180, y: 520, fx: 0, fy: -1, atk: 0, roll: 0, kx: 0, ky: 0, inv: 0.6 });
-    for (const [kind, x, y] of ROOMS[i].spawns) this.spawn(kind, x, y);
-    floatAt(180, 330, ROOMS[i].name, 'banner dark', 1800);
+    for (const [kind, x, y] of def.spawns) this.spawn(kind, x, y);
+    floatAt(180, 330, `${this.levelName} · ${def.name}`, 'banner dark', 1800);
     this.renderHud();
   }
 
@@ -151,10 +170,10 @@ export class DungeonScene extends Phaser.Scene {
     c.open = true;
     c.sp.setTexture('chest_1');
     sfx('chest');
-    ROOMS[this.room].chest.forEach((id, i, arr) => this.drop(id, 180, 260, 180 + (i - (arr.length - 1) / 2) * 44, 308));
-    const last = this.room === ROOMS.length - 1;
+    this.plan[this.room].chest.forEach((id, i, arr) => this.drop(id, 180, 260, 180 + (i - (arr.length - 1) / 2) * 44, 308));
+    const last = this.room === this.plan.length - 1;
     this.choice = h('div', { class: 'choice' },
-      btn(last ? 'Leave with your loot ▶' : 'Leave with loot', () => this.endRun(false), last ? 'primary' : ''),
+      btn(last ? 'Leave with your loot ▶' : 'Leave with loot', () => this.endRun(false, last), last ? 'primary' : ''),
       !last && btn('Go deeper ▶', () => { sfx('tap'); this.enterRoom(this.room + 1); }, 'primary'),
     );
     floatLayer.append(this.choice);
@@ -179,7 +198,7 @@ export class DungeonScene extends Phaser.Scene {
     for (let i = 0; i < RULES.bagSlots; i++) bag.append(h('span', { class: 'slot' }, this.bag[i] ? icon(`item_${this.bag[i]}`, 'ico s') : null));
     const boss = this.enemies.find((e) => e.kind === 'guardian');
     setHud(h('div', { class: 'dhud' },
-      h('div', { class: 'drow' }, hearts, h('span', { class: 'roomno' }, `Room ${this.room + 1} of 3`)),
+      h('div', { class: 'drow' }, hearts, h('span', { class: 'roomno' }, `${this.levelName} · ${this.room + 1}/${this.plan.length}`)),
       h('div', { class: 'drow bagrow' }, h('small', {}, `Bag ${this.bag.length} of ${RULES.bagSlots}`), bag),
       boss ? h('div', { class: 'boss' }, h('small', {}, `Vault Guardian · ${boss.hp} of ${this.bossMax}`), h('div', { class: 'bar' }, h('i', { style: `width:${(boss.hp / this.bossMax) * 100}%` }))) : null,
     ));
@@ -194,6 +213,8 @@ export class DungeonScene extends Phaser.Scene {
     this.updPlayer(dt);
     for (const e of [...this.enemies]) this.updEnemy(e, dt);
     this.updBullets(dt);
+    this.updBow(dt);
+    this.updArrows(dt);
     this.updPickups();
     if (this.chest && !this.chest.open && Math.hypot(this.p.x - 180, this.p.y - 260) < 30) this.openChest();
   }
@@ -232,6 +253,13 @@ export class DungeonScene extends Phaser.Scene {
       sfx('roll');
     }
     if (consume('attack') && p.atk <= 0 && p.roll <= 0) this.attack();
+    // unlocked after Level 1: the wrench swings on its own when something is in reach
+    this.autoCd -= dt;
+    if (S.unlocks.auto && this.autoCd <= 0 && p.atk <= 0 && p.roll <= 0 && this.enemies.some((e) => Math.hypot(e.x - p.x, e.y - p.y) - e.r < 38)) {
+      this.autoCd = 0.5;
+      this.attack();
+    }
+    this.pushOut(p, 8);
 
     p.x = Phaser.Math.Clamp(p.x, B.x0, B.x1);
     p.y = Phaser.Math.Clamp(p.y, B.y0, B.y1);
@@ -434,6 +462,7 @@ export class DungeonScene extends Phaser.Scene {
       const min = e.r + o.r;
       if (od < min) { e.x += (ox / od) * (min - od) * 0.5; e.y += (oy / od) * (min - od) * 0.5; }
     }
+    if (e.kind !== 'drone') this.pushOut(e, e.r * 0.7);
     e.x = Phaser.Math.Clamp(e.x, B.x0 + e.r - 8, B.x1 - e.r + 8);
     e.y = Phaser.Math.Clamp(e.y, B.y0 + e.r - 8, B.y1 - e.r + 8);
     e.sp.setPosition(e.x, e.y - (e.kind === 'drone' ? 14 : 6)).setDepth(e.y).setFlipX(dx < 0);
@@ -448,9 +477,73 @@ export class DungeonScene extends Phaser.Scene {
       b.sp.setPosition(b.x, b.y);
       const hit = Math.hypot(b.x - this.p.x, b.y - this.p.y) < 12;
       if (hit) this.hurt(b.x - b.vx, b.y - b.vy);
-      if (hit || b.x < B.x0 - 10 || b.x > B.x1 + 10 || b.y < B.y0 - 10 || b.y > B.y1 + 10) {
+      if (hit || this.inBlock(b.x, b.y) || b.x < B.x0 - 10 || b.x > B.x1 + 10 || b.y < B.y0 - 10 || b.y > B.y1 + 10) {
         b.sp.destroy();
         this.bullets.splice(this.bullets.indexOf(b), 1);
+      }
+    }
+  }
+
+  // ---- cover ----
+
+  private inBlock(x: number, y: number) {
+    return this.blocks.some((b) => x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h);
+  }
+
+  /** Slide a body out of any pillar it has walked into. */
+  private pushOut(o: { x: number; y: number }, r: number) {
+    for (const b of this.blocks) {
+      const x0 = b.x - r, x1 = b.x + b.w + r, y0 = b.y - r, y1 = b.y + b.h + r;
+      if (o.x <= x0 || o.x >= x1 || o.y <= y0 || o.y >= y1) continue;
+      const d = [o.x - x0, x1 - o.x, o.y - y0, y1 - o.y];
+      const m = Math.min(...d);
+      if (m === d[0]) o.x = x0; else if (m === d[1]) o.x = x1; else if (m === d[2]) o.y = y0; else o.y = y1;
+    }
+  }
+
+  // ---- the bow: unlocked after Level 3. Drag to aim, release to fire. ----
+
+  private updBow(dt: number) {
+    const p = this.p;
+    this.bowCd -= dt;
+    if (!S.unlocks.bow) return;
+    const aim = aiming();
+    const nearest = () => {
+      let best: Enemy | null = null;
+      let bd = 1e9;
+      for (const e of this.enemies) {
+        const d = Math.hypot(e.x - p.x, e.y - p.y);
+        if (d < bd) { bd = d; best = e; }
+      }
+      if (!best) return { x: p.fx, y: p.fy };
+      return { x: (best.x - p.x) / bd, y: (best.y - p.y) / bd };
+    };
+    if (aim.on) {
+      const d = aim.x || aim.y ? aim : nearest();
+      this.gfx.lineStyle(2, 0x35e0ff, 0.85).lineBetween(p.x, p.y - 8, p.x + d.x * 260, p.y - 8 + d.y * 260);
+      this.gfx.fillStyle(0x35e0ff, 0.9).fillCircle(p.x + d.x * 260, p.y - 8 + d.y * 260, 4);
+    }
+    const shot = takeShot();
+    if (!shot || this.bowCd > 0 || p.roll > 0) return;
+    const d = shot.x || shot.y ? shot : nearest();
+    this.bowCd = 0.65;
+    p.fx = d.x;
+    p.fy = d.y;
+    sfx('swing');
+    this.arrows.push({ sp: this.add.image(p.x, p.y - 8, 'arrow').setDepth(997).setRotation(Math.atan2(d.y, d.x)), x: p.x, y: p.y - 8, vx: d.x * 430, vy: d.y * 430 });
+  }
+
+  private updArrows(dt: number) {
+    for (const a of [...this.arrows]) {
+      a.x += a.vx * dt;
+      a.y += a.vy * dt;
+      a.sp.setPosition(a.x, a.y);
+      const m = Math.hypot(a.vx, a.vy);
+      const target = this.enemies.find((e) => Math.hypot(e.x - a.x, e.y - 6 - a.y) < e.r + 6);
+      if (target) this.hitEnemy(target, 2 + (S.upgrades.wrench ? 1 : 0), a.vx / m, a.vy / m, false);
+      if (target || this.inBlock(a.x, a.y) || a.x < B.x0 - 12 || a.x > B.x1 + 12 || a.y < B.y0 - 30 || a.y > B.y1 + 12) {
+        a.sp.destroy();
+        this.arrows.splice(this.arrows.indexOf(a), 1);
       }
     }
   }
@@ -508,7 +601,7 @@ export class DungeonScene extends Phaser.Scene {
 
   // ---- end of run ----
 
-  private endRun(defeated: boolean) {
+  private endRun(defeated: boolean, complete = false) {
     if (this.ended) return;
     this.ended = true;
     this.choice?.remove();
@@ -519,6 +612,6 @@ export class DungeonScene extends Phaser.Scene {
       while (this.bag.length > keep) lost.push(...this.bag.splice(Math.floor(Math.random() * this.bag.length), 1));
     }
     log('run_end', { rooms: this.cleared, defeated, bag: this.bag, hearts: this.hp });
-    this.time.delayedCall(defeated ? 700 : 150, () => hooks.runEnded({ bag: this.bag, lost, rooms: this.cleared, defeated }));
+    this.time.delayedCall(defeated ? 700 : 150, () => hooks.runEnded({ bag: this.bag, lost, rooms: this.cleared, total: this.plan.length, defeated, complete, daily: this.daily }));
   }
 }
