@@ -388,3 +388,5 @@ input[type='range'].heat::-moz-range-thumb { width: 1.3em; height: 1.3em; border
 .pillars b { font-size: 1.7em; }
 .titlebtns { width: 88%; margin: 0 auto 0.8em; }
 .titlebtns .btn.big { font-size: 1.6em; padding: 0.75em 1em; }
+
+.tagline b { display: inline-block; margin-top: 0.25em; font-size: 1.15em; font-weight: 700; color: #ffd84a; text-shadow: 0 0.07em 0 #b5321b; }
