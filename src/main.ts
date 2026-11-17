@@ -16,6 +16,7 @@ import { DungeonScene } from './scenes/DungeonScene';
 import offerData from './offers.json';
 import { INTRO, UNLOCK_INFO, Unlock } from './levels';
 import { PET_INFO } from './pet';
+import { promoFor } from './promos';
 import { BRANCHES, Branch, NODES, anyAffordable, buy, costOf, lockReason, lvl, maxed, shelfCount, storageCap, walkInCount } from './upgrades';
 
 // ---- boot ----
@@ -294,6 +295,12 @@ hooks.cityExit = () => dungeonIntro();
 
 // ---- night: dungeon ----
 
+/** What sells best on a given shop day, so the player knows what to bring back. */
+function tomorrowHint(shopDay: number) {
+  const p = promoFor(shopDay);
+  return p ? h('div', { class: 'reward promo' }, h('span', {}, p.emoji), h('div', {}, h('b', {}, `Tomorrow: ${p.name}`), h('small', {}, p.text))) : null;
+}
+
 function dungeonIntro() {
   go('shop', { idle: true });
   hud((hudLabel = `Night ${S.day}`));
@@ -312,7 +319,8 @@ function dungeonIntro() {
       stat('Attack', S.unlocks.auto ? 'Automatic · J' : 'Button · J'),
       stat('Dodge roll', 'Button · K'),
       S.unlocks.bow ? stat('Bow', 'Drag to aim · L') : null),
-    h('p', { class: 'fine' }, 'Five hearts, six bag slots. Red shapes show where an attack will land.'),
+    tomorrowHint(S.day + 1),
+    h('p', { class: 'fine' }, 'Red shapes show where an attack will land.'),
     btn('Enter ▶', () => { sfx('tap'); setModal(null); go('dungeon', { daily }); }, 'primary')));
 }
 
@@ -403,12 +411,12 @@ function morning() {
   hud((hudLabel = `Day ${S.day + 1}`));
   const slots = shelfCount();
   setModal(pricingPanel('Morning: stock and price',
-    `Last night’s loot is on the shelves: ${S.stock.length} items, ${slots} on display at a time. Price each one. Too high and customers leave; too low and you leave money on the table.`,
+    `${S.stock.length} items in stock, ${slots} on display at a time. Check today’s promotion, then set your prices.`,
     'Open the shop', () => {
       setModal(null);
-      log('day_start', { tutorial: false, stock: S.stock, prices: S.prices });
+      log('day_start', { tutorial: false, stock: S.stock, prices: S.prices, promo: promoFor(S.day + 1)?.name });
       go('shop', {});
-    }));
+    }, S.day + 1));
 }
 
 // ---- close and tally ----
@@ -426,10 +434,10 @@ function summary(d: DaySummary) {
   let verdict: string;
   if (d.campaignUsed) {
     verdict = profit > other
-      ? `The campaign packed the shop: ${d.customers} customers instead of ${walkIns}. You gave back ${d.cashback} coins in cashback and still came out ${profit - other} ahead.`
-      : `The campaign brought ${d.customers} customers instead of ${walkIns}, but this time the extra sales did not cover the cashback. More stock, or prices customers accept, makes it pay.`;
+      ? `Cashback magic packed the shop: ${d.customers} customers instead of ${walkIns}. ${d.happy} went home delighted${d.regulars ? `, and ${d.regulars} will be back tomorrow` : ''}. You came out ${profit - other} coins ahead.`
+      : `Cashback brought ${d.customers} customers instead of ${walkIns} and sent ${d.happy} home delighted${d.regulars ? `; ${d.regulars} will be back tomorrow` : ''}. With more stock on the shelves, a crowd like that pays even better.`;
   } else {
-    verdict = `No campaign today. Hit the ${BRAND} button tomorrow: about ${walkIns * RULES.campaignMult} customers instead of ${walkIns}.`;
+    verdict = `No campaign today. Hit the ${BRAND} button tomorrow: Cashback draws about ${walkIns * RULES.campaignMult} customers instead of ${walkIns}, and sends them home happy.`;
   }
   log('summary', { profit, estimateOther: other, campaign: d.campaignUsed });
   S.phase = 'upgrade';
@@ -449,7 +457,12 @@ function summary(d: DaySummary) {
     h('div', { class: 'tiles' },
       h('span', {}, h('b', {}, `${d.sales}/${d.startStock.length}`), h('small', {}, 'Sold')),
       h('span', {}, h('b', {}, d.revenue), h('small', {}, 'Revenue')),
-      h('span', {}, h('b', {}, d.cashback ? `−${d.cashback}` : '0'), h('small', {}, 'Cashback'))),
+      d.campaignUsed
+        ? h('span', { class: 'magic' }, h('b', {}, `✨ ${d.cashback}`), h('small', {}, 'Cashback gifted'))
+        : h('span', {}, h('b', {}, d.revenue ? Math.round(d.revenue / Math.max(1, d.sales)) : 0), h('small', {}, 'Avg sale'))),
+    d.campaignUsed ? h('div', { class: 'tiles two' },
+      h('span', { class: 'magic' }, h('b', {}, `💖 ${d.happy}`), h('small', {}, 'Delighted customers')),
+      h('span', { class: 'magic' }, h('b', {}, `🔁 ${d.regulars}`), h('small', {}, 'Coming back tomorrow'))) : null,
     h('div', { class: `compare ${d.campaignUsed && gain > 0 ? 'win' : ''}` },
       h('div', { class: 'cmphead' },
         h('b', {}, `⚡ ${BRAND} campaign`),
@@ -549,6 +562,7 @@ function endCard() {
   log('loop_complete', { day: S.day, coins: S.coins, xp: S.xp });
   setModal(h('div', { class: 'card pop' },
     hero('Loop complete', 'See you tomorrow!', 'Fight, price, sell, upgrade: that is one full loop. In the app, play is capped at one loop a day, so the shop is always waiting.'),
+    tomorrowHint(S.day + 2),
     h('div', { class: 'stats' }, stat('Coins', S.coins), stat('Shop level', S.level), S.pet ? stat('Companion', `${S.pet.name} the ${PET_INFO[S.pet.kind].label}`) : null, stat('Dungeon', S.dungeonLevel >= INTRO.length ? 'Daily unlocked' : `Level ${S.dungeonLevel} of ${INTRO.length}`), stat('Local partners', `${S.partners.length} of ${PARTNERS.length}`), stat('Shop List', `${S.shopList.length} saved`)),
     btn('Play the next day ▶', () => { sfx('tap'); S.day++; S.phase = 'dungeon'; save(); city(); }, 'primary'),
     btn('Download event log', downloadLog),

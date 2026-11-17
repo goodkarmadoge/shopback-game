@@ -4,6 +4,7 @@ import { ITEMS, ItemId, Reaction } from './econ';
 import { S, save } from './state';
 import { btn, card, h, icon } from './ui';
 import { sfx } from './audio';
+import { WEEK, promoBonus, promoFor, promoItems } from './promos';
 
 export const BRAND = 'ShopBack'; // swap for a stand-in name here if needed
 
@@ -48,8 +49,30 @@ export function noteText(id: ItemId): string {
   return parts.length ? parts.join('  ·  ') : 'No notes yet';
 }
 
+/** The week's promotions as seven chips; today is lit, tapping any day shows its deal. */
+export function weekStrip(shopDay: number): HTMLElement {
+  const today = promoFor(shopDay);
+  const detail = h('div', { class: 'promoline' });
+  const show = (i: number) => {
+    const p = WEEK[i];
+    const isToday = p === today;
+    detail.replaceChildren(
+      h('b', {}, `${p.emoji} ${p.name}`), h('span', { class: 'when' }, isToday ? 'Today' : p.day),
+      h('small', {}, p.text),
+      h('div', { class: 'promoicons' }, ...promoItems(p).map((id) => icon(`item_${id}`, 'ico s')), h('i', {}, `+${Math.round(p.bonus * 100)}%`)));
+    chips.forEach((c, k) => c.classList.toggle('sel', k === i));
+  };
+  const chips = WEEK.map((p, i) => {
+    const c = h('button', { class: `daychip ${p === today ? 'today' : ''}`, type: 'button', 'aria-label': `${p.name}: ${p.text}` }, h('small', {}, p.day), h('span', {}, p.emoji));
+    c.addEventListener('click', () => { sfx('tap'); show(i); });
+    return c;
+  });
+  show(today ? WEEK.indexOf(today) : 0);
+  return h('div', { class: 'calendar' }, h('div', { class: 'week' }, ...chips), detail);
+}
+
 /** Price sliders for every item type in stock, with the notebook beside each. */
-export function pricingPanel(title: string, sub: string, cta: string, onDone: () => void): HTMLElement {
+export function pricingPanel(title: string, sub: string, cta: string, onDone: () => void, shopDay = 1): HTMLElement {
   const types = [...new Set(S.stock)].sort((a, b) => ITEMS[a].value - ITEMS[b].value);
   const rows = types.map((id) => {
     const it = ITEMS[id];
@@ -66,13 +89,14 @@ export function pricingPanel(title: string, sub: string, cta: string, onDone: ()
     return h('div', { class: 'prow' },
       icon(`item_${id}`),
       h('div', { class: 'pmain' },
-        h('div', { class: 'pname' }, h('span', {}, `${it.name} ×${count}`), h('span', { class: `rar ${it.rarity}` }, it.rarity)),
+        h('div', { class: 'pname' }, h('span', {}, `${it.name} ×${count}`),
+          promoBonus(shopDay, id) ? h('span', { class: 'rar hot' }, `▲ ${Math.round(promoBonus(shopDay, id) * 100)}% today`) : h('span', { class: `rar ${it.rarity}` }, it.rarity)),
         h('div', { class: 'pslide' }, slider, icon('coin', 'ico s'), out),
         h('div', { class: 'pnote' }, noteText(id)),
       ),
     );
   });
-  return card(title, h('p', {}, sub), h('div', { class: 'prows' }, ...rows),
+  return card(title, h('p', {}, sub), shopDay >= 2 ? weekStrip(shopDay) : null, h('div', { class: 'prows' }, ...rows),
     h('div', { class: 'legend' }, h('span', { class: 'g' }, 'Sells'), h('span', { class: 'y' }, 'They haggle'), h('span', { class: 'r' }, 'They leave'), h('span', { class: 'u' }, 'Unknown')),
     btn(cta, () => { sfx('tap'); save(); onDone(); }, 'primary'));
 }

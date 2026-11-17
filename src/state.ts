@@ -22,6 +22,8 @@ export interface State {
   /** Upgrade tree: node id -> level owned. See upgrades.ts. */
   up: Record<string, number>;
   pet: { kind: 'cat' | 'dog'; name: string } | null;
+  /** Customers won over by cashback who come back as extra walk-ins tomorrow. */
+  regulars: number;
   interests: string[];
   shopList: string[];
   muted: boolean;
@@ -49,6 +51,7 @@ export function fresh(): State {
     notebook: byItem(() => ({})),
     up: {},
     pet: null,
+    regulars: 0,
     interests: [],
     shopList: [],
     muted: false,
@@ -126,6 +129,9 @@ export interface DaySummary {
   campaignUsed: boolean;
   /** Sales made before opening, through pre-orders. */
   preorders: { item: ItemId; price: number }[];
+  /** Customers who received cashback, and how many of them will return tomorrow. */
+  happy: number;
+  regulars: number;
   customers: number;
   startStock: ItemId[];
 }

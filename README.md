@@ -41,6 +41,12 @@ npm run build
   - **Backpack:** loot slots, 6 up to 12.
   - **Pet:** damage, attack speed, a saddlebag for extra loot, and the homing run, which sends the pet back to the store with your bag so that loot is safe even if you fall.
 
+## Haggling, cashback and the promotion calendar
+
+- **Haggling** is one sheet with one slider and one button. Slide toward their offer (green) or your price (red); the button reads Deal, Counter or Hold firm to match. Each counter costs the customer a heart.
+- **Cashback** on campaign sales does three things: it brings customers who would not have come, it makes them 5% more willing to pay, and one in three comes back as an extra walk-in the next day.
+- **Promotion calendar** (`src/promos.ts`): each day of the week has a theme that makes some loot worth more, such as Gear Up Monday or Flashy Friday. The pricing screen shows the week, and the dungeon intro shows tomorrow's theme so you know what to bring back.
+
 ## Dungeon progression
 
 - **Five introduction levels**, one per night. Level 1 unlocks auto attack, Level 3 unlocks the bow (drag the bow button to aim, release to fire; L on desktop), Level 5 is the Vault Guardian.
