@@ -28,7 +28,7 @@ npm run build
 4. **Night:** one dungeon level. Fill a six-slot loot bag.
 5. **Offer card:** one skippable, sponsored example deal picked from your interests.
 6. **Morning:** price last night's loot.
-7. **Shop day:** walk the shop, restock empty shelves by walking up to them, and haggle. Hit the ShopBack button (top right) once for 3x customers and 10% cashback per sale.
+7. **Shop day:** walk up to any display case and tap Change display (or + Stock) to choose what it shows from the stock room, and haggle. After a rejected counter the slider stays on your last offer. Hit the ShopBack button (top right) once for 3x customers and 10% cashback per sale.
 8. **Close:** revenue, cashback and profit, next to an estimate of the day without the campaign.
 9. **Upgrade,** then the "come back tomorrow" card.
 

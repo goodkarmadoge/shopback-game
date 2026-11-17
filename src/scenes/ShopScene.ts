@@ -3,9 +3,9 @@ import {
   BASE_IDS, Barter, CTYPES, Customer, ITEMS, VIP_LIMIT, ItemId, RULES, approach, barterStep, makeCustomer, reaction, startBarter, takeForShelf,
 } from '../econ';
 import { S, hooks, log, save } from '../state';
-import { btn, floatAt, floatLayer, h, icon, place, setModal, setSheet } from '../ui';
+import { btn, card, floatAt, floatLayer, h, icon, place, setModal, setSheet, toast } from '../ui';
 import { BRAND, EMOTE, heat, pricingPanel } from '../panels';
-import { axis, buildControls, resetInput } from '../input';
+import { axis, buildControls, consume, resetInput } from '../input';
 import { music, sfx } from '../audio';
 import lines from '../lines.json';
 import { PARTNER_BONUS } from './CityScene';
@@ -37,6 +37,8 @@ interface Haggle {
   res: (price: number | null) => void;
   /** Set once the deal is struck or lost, while the closing animation plays. */
   done?: boolean;
+  /** The player's most recent counter, which the slider stays on after a "no". */
+  last?: number;
 }
 
 const DOOR = { x: 180, y: 500 };
@@ -80,7 +82,10 @@ export class ShopScene extends Phaser.Scene {
   private happy = 0;
   private regularsToday = 0;
   private shopDay = 1;
-  private hg: { sheet: HTMLElement; say: HTMLElement; hearts: HTMLElement; num: HTMLElement; word: HTMLElement; slider: HTMLInputElement; go: HTMLButtonElement; low: HTMLElement } | null = null;
+  private hg: { sheet: HTMLElement; say: HTMLElement; hearts: HTMLElement; num: HTMLElement; word: HTMLElement; slider: HTMLInputElement; go: HTMLButtonElement; low: HTMLElement; mine: HTMLElement } | null = null;
+  private promptEl: HTMLElement | null = null;
+  private near: Slot | null = null;
+  private picking: Slot | null = null;
 
   constructor() {
     super('shop');
@@ -206,7 +211,7 @@ export class ShopScene extends Phaser.Scene {
     }
     for (const s of this.slots) {
       const need = !s.item && this.back.length > 0;
-      const text = s.item ? String(S.prices[s.item]) : need ? '+ Restock' : '';
+      const text = s.item ? String(S.prices[s.item]) : need ? '+ Stock' : '';
       if (s.tag.textContent !== text) s.tag.textContent = text;
       s.tag.classList.toggle('off', !text);
       s.tag.classList.toggle('need', need);
@@ -236,14 +241,81 @@ export class ShopScene extends Phaser.Scene {
     }
     this.placeHero(moving);
 
-    // walking up to an empty shelf restocks it from the back room
+    // standing at a display case offers to change what is on it
+    let near: Slot | null = null;
+    let best = 44;
     for (const s of this.slots) {
-      if (s.item || !this.back.length || Math.hypot(p.x - s.x, p.y - (s.y + 6)) > 40) continue;
-      this.stockSlot(s);
-      sfx('tap');
-      floatAt(s.x, s.y - 26, 'Restocked!', 'gain', 800);
-      this.refresh();
+      const d = Math.hypot(p.x - s.x, p.y - (s.y + 6));
+      if (d < best) { best = d; near = s; }
     }
+    const tapped = consume('attack');
+    if (near !== this.near || this.promptEl?.dataset.k !== this.promptKey(near)) {
+      this.near = near;
+      this.paintPrompt();
+    }
+    if (tapped && near && !this.cur && !this.picking) this.openPicker(near);
+  }
+
+  private promptKey(s: Slot | null) {
+    return s ? `${s.item ?? ''}|${s.reserved}|${this.back.length > 0}` : '';
+  }
+
+  private paintPrompt() {
+    const el = this.promptEl;
+    if (!el) return;
+    const s = this.near;
+    el.dataset.k = this.promptKey(s);
+    el.replaceChildren();
+    if (!s || (!s.item && !this.back.length)) return;
+    el.append(btn(s.item ? [icon(`item_${s.item}`, 'ico s'), ' Change display'] : '+ Stock this display', () => this.openPicker(s), 'primary'));
+  }
+
+  /** Pick what goes on this display case from the stock room. */
+  private openPicker(s: Slot) {
+    if (s.reserved) return toast('A customer is looking at this one.');
+    if (!this.back.length && !s.item) return;
+    sfx('tap');
+    resetInput();
+    this.picking = s;
+    const close = () => {
+      this.picking = null;
+      setModal(null);
+    };
+    const put = (id: ItemId | null) => {
+      if (s.reserved) {
+        toast('A customer got there first.');
+        return close();
+      }
+      if (id) this.back.splice(this.back.indexOf(id), 1);
+      if (s.item) this.back.push(s.item);
+      s.item = id;
+      s.icon.setVisible(!!id);
+      if (id) {
+        s.icon.setTexture(`item_${id}`);
+        this.tweens.add({ targets: s.icon, scale: { from: 0.2, to: 1 }, duration: 260, ease: 'Back.out' });
+        floatAt(s.x, s.y - 26, 'On display!', 'gain', 800);
+      }
+      sfx('coin');
+      log('display', { item: id });
+      this.refresh();
+      close();
+    };
+    const kinds = [...new Set(this.back)].sort((a, b) => ITEMS[b].value - ITEMS[a].value);
+    const wanted = new Set(this.custs.filter((cu) => cu.bubble?.classList.contains('wait')).map((cu) => cu.c.wants));
+    setModal(card(s.item ? 'Change display' : 'Stock display',
+      s.item ? h('p', { class: 'pickcur' }, icon(`item_${s.item}`, 'ico s'), ` Showing ${ITEMS[s.item].name}`) : null,
+      kinds.length
+        ? h('div', { class: 'picklist' }, ...kinds.map((id) => {
+          const b = h('button', { class: `pick ${wanted.has(id) ? 'hot' : ''}`, type: 'button' },
+            icon(`item_${id}`), h('b', {}, ITEMS[id].name),
+            h('small', {}, `×${this.back.filter((i) => i === id).length} · ${S.prices[id]}`),
+            wanted.has(id) ? h('em', {}, 'Wanted!') : null);
+          b.addEventListener('click', () => put(id));
+          return b;
+        }))
+        : h('p', {}, 'The stock room is empty.'),
+      s.item ? btn('Take it off display', () => put(null), 'ghost') : null,
+      btn('Cancel', close, 'ghost')));
   }
 
   private placeHero(moving: boolean) {
@@ -349,6 +421,7 @@ export class ShopScene extends Phaser.Scene {
     // one in three customers who got cashback comes back tomorrow
     if (!this.tutorial) S.regulars = Math.min(4, Math.floor(this.happy / 3));
     this.over = true;
+    if (this.picking) setModal(null);
     this.statusEl.remove();
     this.coachEl.remove();
     this.fab?.remove();
@@ -383,7 +456,7 @@ export class ShopScene extends Phaser.Scene {
         this.bubble(cu, '👀', `Any ${it.name}?`, 'wait');
         if (!this.toldRestock) {
           this.toldRestock = true;
-          this.coach('A shelf is empty! Walk over to it to restock.');
+          this.coach('A display is empty! Walk over and stock it.');
         }
       }
       await this.walk(sp, rnd(140, 220), rnd(440, 465));
@@ -511,6 +584,7 @@ export class ShopScene extends Phaser.Scene {
     const cur = this.cur;
     if (!cur || cur.done) return;
     if (value <= cur.b.offer) return this.finish(cur.b.offer);
+    cur.last = value;
     const res = barterStep(cur.b, value);
     if (res.result === 'deal') this.finish(res.price);
     else if (res.result === 'leave') this.finish(null);
@@ -589,7 +663,9 @@ export class ShopScene extends Phaser.Scene {
   private showControls() {
     if (this.over || this.idle) return;
     resetInput();
-    setSheet(h('div', { class: 'cityui' }, buildControls()));
+    this.promptEl = h('div', { class: 'cityprompt' });
+    setSheet(h('div', { class: 'cityui' }, this.promptEl, buildControls()));
+    this.paintPrompt();
   }
 
   /** Builds the haggle sheet once per customer. Rounds update it in place so it can animate. */
@@ -601,6 +677,7 @@ export class ShopScene extends Phaser.Scene {
     const num = h('b', {});
     const word = h('small', {});
     const low = h('small', {});
+    const mine = h('small', { class: 'mine' });
     const slider = h('input', { type: 'range', class: 'heat big', step: 1, 'aria-label': 'Your answer' });
     const go = h('button', { class: 'hggo', type: 'button' });
     go.addEventListener('click', () => this.act(Number(slider.value)));
@@ -611,10 +688,10 @@ export class ShopScene extends Phaser.Scene {
         h('div', { class: 'hgtalk' }, h('small', {}, CTYPES[b.type].name), say)),
       h('div', { class: 'hgprice' }, icon(`item_${cur.item}`), num, word),
       slider,
-      h('div', { class: 'hgends' }, low, h('small', {}, `Your price ${b.ask}`)),
+      h('div', { class: 'hgends' }, low, mine, h('small', {}, `Your price ${b.ask}`)),
       go,
       this.tutorial ? h('p', { class: 'tip' }, 'Slide to choose your answer. Each counter costs a heart; at zero they walk.') : null);
-    this.hg = { sheet, say, hearts, num, word, slider, go, low };
+    this.hg = { sheet, say, hearts, num, word, slider, go, low, mine };
     setSheet(sheet);
     this.updateBarter(true);
   }
@@ -631,8 +708,10 @@ export class ShopScene extends Phaser.Scene {
     hg.hearts.setAttribute('aria-label', `Patience ${b.patience} of ${b.patience0}`);
     hg.slider.min = String(b.offer);
     hg.slider.max = String(b.ask);
-    hg.slider.value = String(Math.round((b.offer + b.ask) / 2));
+    // after a "no" the slider stays on the price you just proposed
+    hg.slider.value = String(cur.last != null ? Phaser.Math.Clamp(cur.last, b.offer, b.ask) : Math.round((b.offer + b.ask) / 2));
     hg.low.textContent = `They offer ${b.offer}`;
+    hg.mine.textContent = cur.last != null ? `You said ${cur.last}` : '';
     if (!first) {
       // nudge the eye: the bubble pops, the sheet shrugs, their offer flashes
       for (const [el, cls] of [[hg.say, 'pop'], [hg.sheet, 'nope'], [hg.low, 'up']] as const) {
@@ -659,6 +738,9 @@ export class ShopScene extends Phaser.Scene {
     if (v <= b.offer) {
       hg.go.textContent = 'Deal!';
       hg.word.textContent = 'Take their offer';
+    } else if (v === cur.last) {
+      hg.go.textContent = 'Ask again';
+      hg.word.textContent = 'Your last offer';
     } else if (v >= b.ask) {
       hg.go.textContent = 'Hold firm';
       hg.word.textContent = 'Your full price';

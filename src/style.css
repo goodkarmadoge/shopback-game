@@ -531,3 +531,17 @@ input[type='range'].heat.big::-moz-range-thumb { width: 2em; height: 2em; border
 .tiles .magic b { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--sb-pink); }
 .tiles span { text-align: center; }
 .tiles small { line-height: 1.25; }
+
+/* ---- display picker and last-offer marker ---- */
+.picklist { display: grid; gap: 0.45em; margin: 0.6em 0; max-height: 17em; overflow-y: auto; }
+.pick { display: grid; grid-template-columns: 2.4em 1fr auto; align-items: center; gap: 0.6em; padding: 0.5em 0.7em; min-height: 3.4em;
+  border: 2px solid #eee4dc; border-radius: 0.9em; background: #fff; font: inherit; color: var(--sb-ink); text-align: left; cursor: pointer; }
+.pick:active { transform: scale(0.97); }
+.pick .ico { width: 2.4em; height: 2.4em; }
+.pick b { font-family: var(--display); font-weight: 600; }
+.pick small { font-family: var(--display); font-weight: 600; color: var(--sb-ink-2); }
+.pick.hot { border-color: var(--sb-red); background: #fff4f1; }
+.pick em { grid-column: 2 / -1; font-style: normal; font-size: 0.72em; font-weight: 700; color: var(--sb-red); margin-top: -0.5em; }
+.pickcur { display: flex; align-items: center; justify-content: center; gap: 0.3em; color: var(--sb-ink-2); margin: 0; }
+.hgends small.mine { color: var(--sb-ink); background: #f3ebe4; border-radius: 1em; padding: 0 0.6em; }
+.hgends small.mine:empty { display: none; }
