@@ -72,7 +72,8 @@ Simulates 1,000 shop days per price point and fails if a campaign day does not b
 | `src/scenes/DungeonScene.ts` | Combat, enemies, loot bag |
 | `src/main.ts` | The flow between screens: onboarding, results, offer card, summary, upgrades |
 | `src/scenes/CityScene.ts` | The City hub: walk around, partner with businesses, enter the dungeon |
-| `src/art.ts` | Pixel-art sprites (customers, enemies, items), drawn in code |
+| `src/art.ts` | Small effects and HUD glyphs drawn in code |
+| `src/sprites.ts` | Rendered sprites for customers, enemies, loot, chest, coin and tables (`public/sprites`, built by `python3 scripts/build-sprites.py` from the renders in `assets-src/gen`) |
 | `src/scenery.ts` | Painted shop, dungeon and city backdrops, drawn in code at 2x |
 | `src/viewer3d.ts` | Live three.js preview of the shopkeeper models on the select screen |
 | `src/audio.ts` | Synthesised music and sound effects |

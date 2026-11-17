@@ -32,9 +32,9 @@ campaign to pull in a crowd.
 | --- | --- | --- |
 | `01-home-screen.png` | Welcome screen | Title, hero line, both shopkeepers, live city behind. |
 | `02-busy-shop.png` | Shop during a ShopBack campaign | Nine display cases, "Delighted" customers, coins flying, campaign button LIVE (top right), queue on the street. Cat companion in the shop. |
-| `03-haggle.png` | Haggle flow | Collector offers 170, player slides to 191 on the heat slider; patience hearts under the customer. |
-| `04-dungeon-combat-cat.png` | Intro dungeon, Level 3, with the lucky cat | Shopkeeper and cat fighting drones and a scrap bot. |
-| `05-daily-dungeon-combat-dog.png` | Daily Dungeon with the shiba | Bow shot mid-flight, server-rack pillars, shiba attacking. |
+| `03-haggle.png` | Haggle flow | Bargain Hunter offers 105 for a Rare Core, player slides to 172 on the heat slider; patience hearts under the customer. |
+| `04-dungeon-combat-cat.png` | Intro dungeon, Level 3, with the lucky cat | Shopkeeper and cat landing a hit on a scrap bot, drones closing in. |
+| `05-daily-dungeon-combat-dog.png` | Daily Dungeon with the shiba | Glitch slimes and a drone among server-rack pillars, shiba at the shopkeeper's side, bag nearly full. |
 
 ## Hero image guidance
 
@@ -57,8 +57,7 @@ campaign to pull in a crowd.
 - **Type:** title "ShopKeeper" plus the hero line, or the short form
   "Entrepreneur by Day. Adventurer by Night." Rounded, friendly display type
   (the game uses Fredoka).
-- **Style:** the game mixes chunky pixel-art customers and enemies with soft
-  3D-rendered shopkeepers, pets and city. For the hero image pick one look, and
-  the 3D-rendered characters scale up better.
+- **Style:** soft low-poly 3D renders with chunky, faceted, toy-like characters:
+  shopkeepers, customers, pets, enemies and loot all share this look.
 - **Avoid:** on-screen controls and HUD, any wording that makes Cashback sound
   like a fee or a loss, small text, and real brand logos other than ShopBack's.

@@ -6,6 +6,7 @@ import { BRAND } from '../panels';
 import { music, sfx } from '../audio';
 import { CITY_H } from '../scenery';
 import { Pet } from '../pet';
+import { person } from '../sprites';
 
 /** Local businesses the shopkeeper can partner with. Names are invented. */
 export const PARTNERS = [
@@ -164,7 +165,7 @@ export class CityScene extends Phaser.Scene {
     const left = Math.random() < 0.5;
     const key = ['ped_a', 'ped_b', 'cust_hunter', 'cust_rusher', 'cust_collector'][Math.floor(Math.random() * 5)];
     const y = Math.random() < 0.5 ? 478 + Math.random() * 6 : 556 + Math.random() * 8;
-    const sp = this.add.sprite(startX ?? (left ? -20 : 380), y, `${key}_0`).play(key).setDepth(y).setFlipX(!left);
+    const sp = person(this, startX ?? (left ? -20 : 380), y, key).setDepth(y).setFlipX(!left);
     this.tweens.add({ targets: sp, x: left ? 380 : -20, duration: 9000 + Math.random() * 5000, onComplete: () => sp.destroy() });
   }
 

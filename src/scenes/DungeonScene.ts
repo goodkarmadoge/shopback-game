@@ -5,6 +5,7 @@ import { btn, card, floatAt, floatLayer, h, icon, place, setHud, setModal, setSh
 import { aiming, axis, buildControls, consume, press, resetInput, takeShot } from '../input';
 import { Block, INTRO, Kind, RoomDef, dailyDungeon } from '../levels';
 import { Pet } from '../pet';
+import { CHEST_SCALE, ITEM_SCALE, MOB } from '../sprites';
 import { bagSlots, bowDamage, bowReload, hasCourier, maxHearts, meleeBonus, petAttackGap, petBagSlots, petDamage, regenHearts, rollCooldown, shieldHits } from '../upgrades';
 import { music, sfx } from '../audio';
 
@@ -25,6 +26,8 @@ interface Enemy {
   ky: number;
   flash: number;
   small?: boolean;
+  gl: Phaser.GameObjects.Image;
+  base: number;
   gel?: boolean;
 }
 
@@ -49,6 +52,7 @@ const B = { x0: 34, x1: 326, y0: 88, y1: 594 };
 const STATS: Record<Kind, { hp: number; r: number }> = {
   bot: { hp: 3, r: 12 }, drone: { hp: 2, r: 10 }, slime: { hp: 4, r: 12 }, guardian: { hp: 12, r: 22 },
 };
+const GLOW: Record<Kind, number> = { bot: 0xff5470, drone: 0x35e0ff, slime: 0xff6ad5, guardian: 0xff5470 };
 const DROPS: Partial<Record<Kind, ItemId>> = { bot: 'gear', drone: 'cell', guardian: 'core' };
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -73,6 +77,7 @@ export class DungeonScene extends Phaser.Scene {
   private shadow!: Phaser.GameObjects.Image;
   private p = { x: 180, y: 520, fx: 0, fy: -1, atk: 0, combo: 0, comboT: 0, roll: 0, rollCd: 0, inv: 0, rdx: 0, rdy: 0, kx: 0, ky: 0 };
   private enemies: Enemy[] = [];
+  private freeze = 0;
   private pickups: Pickup[] = [];
   private bullets: Bullet[] = [];
   private chest: { sp: Phaser.GameObjects.Image; open: boolean } | null = null;
@@ -123,6 +128,7 @@ export class DungeonScene extends Phaser.Scene {
     this.cameras.main.setZoom(2).centerOn(180, 320);
     this.bg = this.add.image(0, 0, 'dungeon_bg_0').setOrigin(0).setScale(0.5).setDepth(-10);
     this.gfx = this.add.graphics().setDepth(-5);
+    this.add.image(0, 0, 'vignette').setOrigin(0).setScale(2).setDepth(1500);
     this.shadow = this.add.image(0, 0, 'shadow').setScale(0.5);
     this.hero = this.add.sprite(180, 520, `av_${S.avatar}`, 0).setScale(0.6);
     this.input.on('pointerdown', () => press('attack'));
@@ -168,10 +174,12 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   private spawn(kind: Kind, x: number, y: number, small = false): Enemy {
-    const sp = this.add.sprite(x, y, `${kind}_0`).play(kind);
-    if (small) sp.setScale(0.65);
+    const base = MOB[kind].scale * (small ? 0.62 : 1);
+    const sp = this.add.sprite(x, y, kind, 0).play(kind).setScale(base);
+    sp.anims.setProgress(Math.random());
+    const gl = this.add.image(x, y, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(GLOW[kind]).setAlpha(0.32).setScale(kind === 'guardian' ? 1.1 : small ? 0.4 : 0.6, kind === 'guardian' ? 0.6 : small ? 0.22 : 0.34);
     const sh = this.add.image(x, y, 'shadow').setScale(kind === 'guardian' ? 1 : small ? 0.35 : 0.55);
-    const e: Enemy = { kind, sp, sh, x, y, hp: STATS[kind].hp, r: small ? 8 : STATS[kind].r, t: -rnd(0.3, 0.9), st: 'idle', dx: 0, dy: 1, kx: 0, ky: 0, flash: 0, small };
+    const e: Enemy = { kind, sp, sh, x, y, hp: STATS[kind].hp, r: small ? 8 : STATS[kind].r, t: -rnd(0.3, 0.9), st: 'idle', dx: 0, dy: 1, kx: 0, ky: 0, flash: 0, small, gl, base };
     this.enemies.push(e);
     return e;
   }
@@ -189,7 +197,7 @@ export class DungeonScene extends Phaser.Scene {
     log('room_cleared', { room: this.room + 1, hearts: this.hp });
     floatAt(180, 150, `Room clear! +${RULES.xpRoom} XP`, 'banner dark', 1600);
     const sp = this.add.image(180, 260, 'chest_0').setDepth(200);
-    this.tweens.add({ targets: sp, scale: { from: 0, to: 1 }, duration: 300, ease: 'Back.out' });
+    this.tweens.add({ targets: sp, scale: { from: 0, to: CHEST_SCALE }, duration: 300, ease: 'Back.out' });
     this.chest = { sp, open: false };
     floatAt(180, 236, 'Open the chest', 'hint', 2500);
   }
@@ -199,6 +207,8 @@ export class DungeonScene extends Phaser.Scene {
     c.open = true;
     c.sp.setTexture('chest_1');
     sfx('chest');
+    this.puff(180, 252, 0xffe14d, 14, 40);
+    this.tweens.add({ targets: c.sp, scaleX: CHEST_SCALE * 1.2, scaleY: CHEST_SCALE * 0.85, duration: 90, yoyo: true });
     this.plan[this.room].chest.forEach((id, i, arr) => this.drop(id, 180, 260, 180 + (i - (arr.length - 1) / 2) * 44, 308));
     const last = this.room === this.plan.length - 1;
     this.choice = h('div', { class: 'choice' },
@@ -211,11 +221,14 @@ export class DungeonScene extends Phaser.Scene {
   private drop(id: ItemId, fx: number, fy: number, tx: number, ty: number) {
     tx = Phaser.Math.Clamp(tx, B.x0 + 8, B.x1 - 8);
     ty = Phaser.Math.Clamp(ty, B.y0 + 8, B.y1 - 8);
-    const sp = this.add.image(fx, fy, `item_${id}`).setScale(0.75);
+    const sp = this.add.image(fx, fy, `item_${id}`).setScale(ITEM_SCALE * 0.8);
     const k: Pickup = { id, sp, x: tx, y: ty, ready: false, asked: false };
     this.pickups.push(k);
     this.tweens.add({ targets: sp, x: tx, duration: 380 });
-    this.tweens.add({ targets: sp, y: { from: fy, to: ty }, duration: 380, ease: 'Bounce.out', onComplete: () => (k.ready = true) });
+    this.tweens.add({ targets: sp, y: { from: fy, to: ty }, duration: 380, ease: 'Bounce.out', onComplete: () => {
+      k.ready = true;
+      if (sp.active) this.tweens.add({ targets: sp, y: ty - 3, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    } });
   }
 
   // ---- HUD ----
@@ -247,6 +260,8 @@ export class DungeonScene extends Phaser.Scene {
 
   update(_: number, dms: number) {
     if (this.paused || this.ended) return;
+    // hit-stop: a few frozen frames sell the weight of a blow
+    if (this.freeze > 0) { this.freeze -= dms / 1000; return; }
     const dt = Math.min(dms, 50) / 1000;
     this.gfx.clear();
     this.updPlayer(dt);
@@ -291,6 +306,7 @@ export class DungeonScene extends Phaser.Scene {
       p.rdx = p.fx;
       p.rdy = p.fy;
       sfx('roll');
+      this.puff(p.x, p.y + 4, 0xbfd8e8, 6, 16);
     }
     if (consume('attack') && p.atk <= 0 && p.roll <= 0) this.attack();
     // unlocked after Level 1: the wrench swings on its own when something is in reach
@@ -350,6 +366,12 @@ export class DungeonScene extends Phaser.Scene {
     e.hp -= dmg;
     e.flash = 0.1;
     e.sp.setTintFill(0xffffff);
+    // squash, sparks and a beat of hit-stop
+    this.tweens.killTweensOf(e.sp);
+    e.sp.setScale(e.base);
+    this.tweens.add({ targets: e.sp, scaleX: e.base * 1.28, scaleY: e.base * 0.76, duration: 70, yoyo: true, ease: 'Quad.out' });
+    this.burst(e.x, e.y - 8, nx, ny, heavy ? 0xffe14d : 0xeaffff, heavy ? 9 : 5);
+    this.freeze = Math.max(this.freeze, heavy || e.hp <= 0 ? 0.06 : 0.028);
     const k = (e.kind === 'guardian' ? 40 : 170) * (heavy ? 1.5 : 1);
     e.kx = nx * k;
     e.ky = ny * k;
@@ -381,16 +403,35 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   private remove(e: Enemy) {
-    e.sp.destroy();
+    // pop: the sprite flashes white, swells and fades instead of blinking out
+    const sp = e.sp;
+    this.tweens.killTweensOf(sp);
+    sp.setTintFill(0xffffff);
+    this.tweens.add({ targets: sp, scaleX: e.base * 1.45, scaleY: e.base * 1.45, alpha: 0, duration: 170, ease: 'Quad.out', onComplete: () => sp.destroy() });
     e.sh.destroy();
+    e.gl.destroy();
     this.enemies.splice(this.enemies.indexOf(e), 1);
   }
 
-  private puff(x: number, y: number, tint: number) {
-    for (let i = 0; i < 8; i++) {
-      const s = this.add.image(x, y, 'spark').setTint(tint).setDepth(998).setScale(rnd(1, 2));
-      const a = (i / 8) * Math.PI * 2;
-      this.tweens.add({ targets: s, x: x + Math.cos(a) * 26, y: y + Math.sin(a) * 26, alpha: 0, duration: 320, onComplete: () => s.destroy() });
+  private puff(x: number, y: number, tint: number, n = 10, reach = 30) {
+    for (let i = 0; i < n; i++) {
+      const s = this.add.image(x, y, 'spark').setTint(tint).setDepth(998).setScale(rnd(0.7, 1.6)).setBlendMode(Phaser.BlendModes.ADD);
+      const a = (i / n) * Math.PI * 2 + rnd(-0.3, 0.3);
+      const r = reach * rnd(0.6, 1.1);
+      this.tweens.add({ targets: s, x: x + Math.cos(a) * r, y: y + Math.sin(a) * r, alpha: 0, scale: 0.2, duration: rnd(260, 420), ease: 'Quad.out', onComplete: () => s.destroy() });
+    }
+    const ring = this.add.image(x, y, 'glow').setTint(tint).setDepth(997).setBlendMode(Phaser.BlendModes.ADD).setScale(0.2).setAlpha(0.8);
+    this.tweens.add({ targets: ring, scale: 0.9, alpha: 0, duration: 260, ease: 'Quad.out', onComplete: () => ring.destroy() });
+  }
+
+  /** Sparks thrown along the direction of a hit. */
+  private burst(x: number, y: number, nx: number, ny: number, tint: number, n: number) {
+    const base = Math.atan2(ny, nx);
+    for (let i = 0; i < n; i++) {
+      const a = base + rnd(-0.7, 0.7);
+      const r = rnd(18, 42);
+      const s = this.add.image(x, y, 'spark').setTint(tint).setDepth(998).setScale(rnd(0.6, 1.3)).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: s, x: x + Math.cos(a) * r, y: y + Math.sin(a) * r, alpha: 0, scale: 0.15, duration: rnd(160, 300), ease: 'Quad.out', onComplete: () => s.destroy() });
     }
   }
 
@@ -412,7 +453,9 @@ export class DungeonScene extends Phaser.Scene {
     p.kx = ((p.x - fromX) / d) * 220;
     p.ky = ((p.y - fromY) / d) * 220;
     sfx('hurt');
-    this.cameras.main.shake(120, 0.006);
+    this.cameras.main.shake(140, 0.008);
+    this.cameras.main.flash(140, 255, 70, 90);
+    this.freeze = 0.07;
     this.renderHud();
     if (this.hp <= 0) this.endRun(true);
   }
@@ -514,7 +557,8 @@ export class DungeonScene extends Phaser.Scene {
     if (e.kind !== 'drone') this.pushOut(e, e.r * 0.7);
     e.x = Phaser.Math.Clamp(e.x, B.x0 + e.r - 8, B.x1 - e.r + 8);
     e.y = Phaser.Math.Clamp(e.y, B.y0 + e.r - 8, B.y1 - e.r + 8);
-    e.sp.setPosition(e.x, e.y - (e.kind === 'drone' ? 14 : 6)).setDepth(e.y).setFlipX(dx < 0);
+    e.sp.setPosition(e.x, e.y - (e.kind === 'drone' ? 16 + Math.sin(this.time.now / 240 + e.x) * 2.5 : e.kind === 'guardian' ? 12 : 6)).setDepth(e.y).setFlipX(dx < 0);
+    e.gl.setPosition(e.x, e.y + (e.kind === 'guardian' ? 18 : 8)).setDepth(e.y - 2);
     e.sh.setPosition(e.x, e.y + (e.kind === 'guardian' ? 20 : 9)).setDepth(e.y - 1);
     if (e.kind === 'guardian') e.sp.setAngle(e.st === 'stun' ? Math.sin(this.time.now / 90) * 6 : 0);
   }
@@ -636,7 +680,7 @@ export class DungeonScene extends Phaser.Scene {
         this.bag[i] = k.id;
         const { x, y } = k;
         this.takePickup(k);
-        const sp = this.add.image(x, y, `item_${old}`).setScale(0.75);
+        const sp = this.add.image(x, y, `item_${old}`).setScale(ITEM_SCALE * 0.8);
         this.pickups.push({ id: old, sp, x, y, ready: true, asked: true });
         sfx('tap');
         this.renderHud();

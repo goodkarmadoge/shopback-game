@@ -12,6 +12,7 @@ import { PARTNER_BONUS } from './CityScene';
 import { Pet } from '../pet';
 import { charm, lvl, preorders, shelfCount, vipCount, walkInCount } from '../upgrades';
 import { promoBonus, promoFor } from '../promos';
+import { COIN_SCALE, ITEM_SCALE, facePerson, person } from '../sprites';
 
 interface Slot {
   x: number;
@@ -135,12 +136,12 @@ export class ShopScene extends Phaser.Scene {
       // window dressing behind menus: stocked tables and a browsing customer or two
       const wares: ItemId[] = ['core', 'lens', 'gel', 'prism'];
       [[120, 262], [240, 262], [120, 346], [240, 346]].forEach(([x, y], i) => {
-        this.add.image(x, y + 4, 'table').setScale(0.5).setDepth(y - 6);
-        this.add.image(x, y - 12, `item_${wares[i]}`).setDepth(y - 5);
+        this.add.image(x, y + 7, 'table_hd').setScale(0.3).setDepth(y - 6);
+        this.add.image(x, y - 12, `item_${wares[i]}`).setScale(ITEM_SCALE).setDepth(y - 5);
       });
       for (const [key, x, y] of [['cust_collector', 104, 296], ['cust_rusher', 256, 380], ['cust_hunter', 200, 440]] as const) {
         this.add.image(x, y + 14, 'shadow').setScale(0.5).setDepth(y - 1);
-        this.add.sprite(x, y, `${key}_0`).play(key).setDepth(y);
+        person(this, x, y, key).setDepth(y);
       }
       this.cameras.main.fadeIn(500);
       return;
@@ -165,15 +166,19 @@ export class ShopScene extends Phaser.Scene {
     }
     for (const y of n === 9 ? [262, 346, 430] : [262, 346]) {
       for (const x of xs) {
-        this.add.image(x, y + 4, 'table').setScale(0.5).setDepth(y - 6);
+        this.add.image(x, y + 7, 'table_hd').setScale(0.3).setDepth(y - 6);
         const tag = h('div', { class: 'tag' });
         place(tag, x, y + 13);
         floatLayer.append(tag);
         this.dom.push(tag);
-        this.slots.push({ x, y, item: null, reserved: false, icon: this.add.image(x, y - 12, 'item_gear').setDepth(y - 5).setVisible(false), tag });
+        this.slots.push({ x, y, item: null, reserved: false, icon: this.add.image(x, y - 12, 'item_gear').setScale(ITEM_SCALE).setDepth(y - 5).setVisible(false), tag });
       }
     }
-    for (const s of this.slots) this.stockSlot(s, false);
+    for (const s of this.slots) {
+      this.stockSlot(s, false);
+      // wares float a little so the shelves feel alive
+      this.tweens.add({ targets: s.icon, y: s.y - 14.5, duration: rnd(800, 1100), yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    }
 
     // day status, coach line and the campaign button live at the top of the screen
     this.statusEl = h('div', { class: 'daystrip' });
@@ -207,7 +212,7 @@ export class ShopScene extends Phaser.Scene {
     for (const cu of this.custs) {
       cu.sp.setDepth(cu.sp.y);
       cu.sh.setPosition(cu.sp.x, cu.sp.y + 14).setDepth(cu.sp.y - 1);
-      if (cu.bubble) place(cu.bubble, cu.sp.x, cu.sp.y - 22);
+      if (cu.bubble) place(cu.bubble, cu.sp.x, cu.sp.y - 44);
     }
     for (const s of this.slots) {
       const need = !s.item && this.back.length > 0;
@@ -292,7 +297,7 @@ export class ShopScene extends Phaser.Scene {
       s.icon.setVisible(!!id);
       if (id) {
         s.icon.setTexture(`item_${id}`);
-        this.tweens.add({ targets: s.icon, scale: { from: 0.2, to: 1 }, duration: 260, ease: 'Back.out' });
+        this.tweens.add({ targets: s.icon, scale: { from: 0.06, to: ITEM_SCALE }, duration: 260, ease: 'Back.out' });
         floatAt(s.x, s.y - 26, 'On display!', 'gain', 800);
       }
       sfx('coin');
@@ -338,7 +343,7 @@ export class ShopScene extends Phaser.Scene {
 
   private walk(sp: Phaser.GameObjects.Sprite, x: number, y: number, speed = 95) {
     const d = Phaser.Math.Distance.Between(sp.x, sp.y, x, y);
-    sp.setFlipX(x < sp.x);
+    facePerson(sp, x - sp.x, y - sp.y);
     return new Promise<void>((res) => this.tweens.add({ targets: sp, x, y, duration: (d / speed) * 1000, onComplete: () => res() }));
   }
 
@@ -352,7 +357,7 @@ export class ShopScene extends Phaser.Scene {
   private bubble(cu: Cust, face: string, word: string, cls = '') {
     cu.bubble?.remove();
     cu.bubble = h('div', { class: `bubble ${cls}` }, h('span', { class: 'face' }, face), word);
-    place(cu.bubble, cu.sp.x, cu.sp.y - 22);
+    place(cu.bubble, cu.sp.x, cu.sp.y - 44);
     floatLayer.append(cu.bubble);
     this.dom.push(cu.bubble);
   }
@@ -363,19 +368,19 @@ export class ShopScene extends Phaser.Scene {
     s.icon.setVisible(!!s.item);
     if (s.item) {
       s.icon.setTexture(`item_${s.item}`);
-      if (pop) this.tweens.add({ targets: s.icon, scale: { from: 0.2, to: 1 }, duration: 260, ease: 'Back.out' });
+      if (pop) this.tweens.add({ targets: s.icon, scale: { from: 0.06, to: ITEM_SCALE }, duration: 260, ease: 'Back.out' });
     }
   }
 
   private pedestrian(y = rnd(556, 624)) {
     const left = Math.random() < 0.5;
     const key = pickOne(['ped_a', 'ped_b', 'cust_hunter', 'cust_rusher', 'cust_collector']);
-    const sp = this.add.sprite(left ? -20 : 380, y, `${key}_0`).play(key).setDepth(y).setFlipX(!left);
+    const sp = person(this, left ? -20 : 380, y, key).setDepth(y).setFlipX(!left);
     this.tweens.add({ targets: sp, x: left ? 380 : -20, duration: rnd(5000, 8000), onComplete: () => sp.destroy() });
   }
 
   private flyCoin(key: string, fx: number, fy: number, tx: number, ty: number, delay = 0) {
-    const c = this.add.image(fx, fy, key).setDepth(900).setVisible(false);
+    const c = this.add.image(fx, fy, key).setScale(COIN_SCALE).setDepth(900).setVisible(false);
     this.tweens.add({
       targets: c, x: tx, y: ty, duration: 480, delay, ease: 'Quad.in',
       onStart: () => c.setVisible(true), onComplete: () => c.destroy(),
@@ -437,7 +442,7 @@ export class ShopScene extends Phaser.Scene {
   private async visit(c: Customer) {
     const key = `cust_${c.type}`;
     const left = Math.random() < 0.5;
-    const sp = this.add.sprite(left ? -20 : 380, rnd(565, 600), `${key}_0`).play(key);
+    const sp = person(this, left ? -20 : 380, rnd(565, 600), key);
     if (c.vip) sp.setTint(0xffe9a0);
     const cu: Cust = { c, sp, sh: this.add.image(sp.x, sp.y + 14, 'shadow').setScale(0.5) };
     this.custs.push(cu);
@@ -480,6 +485,7 @@ export class ShopScene extends Phaser.Scene {
       this.takeNote(c.wants, r, ask);
       if (c.vip) this.bubble(cu, '👑', ask <= worth * VIP_LIMIT ? 'VIP: I’ll take it!' : 'VIP: too much', ask <= worth * VIP_LIMIT ? 'happy' : 'annoyed');
       else this.bubble(cu, EMOTE[r].face, EMOTE[r].word, r);
+      if (r === 'delighted' || r === 'happy' || c.vip) this.tweens.add({ targets: sp, y: sp.y - (r === 'delighted' ? 9 : 5), duration: 130, yoyo: true, repeat: r === 'delighted' ? 1 : 0, ease: 'Quad.out' });
       await this.wait(800);
 
       const a = approach(c.type, ask, worth, c.vip);
@@ -530,6 +536,11 @@ export class ShopScene extends Phaser.Scene {
     this.sales++;
     sfx('coin');
     floatAt(slot.x, slot.y - 26, `+${price}`, 'gain big');
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const s = this.add.image(slot.x, slot.y - 12, 'spark').setTint(0xffe14d).setDepth(940).setBlendMode(Phaser.BlendModes.ADD).setScale(rnd(0.8, 1.5));
+      this.tweens.add({ targets: s, x: slot.x + Math.cos(a) * 24, y: slot.y - 12 + Math.sin(a) * 18, alpha: 0, scale: 0.2, duration: 380, ease: 'Quad.out', onComplete: () => s.destroy() });
+    }
     for (let i = 0; i < 4; i++) this.flyCoin('coin', slot.x + rnd(-8, 8), slot.y - 10, 40, 24, i * 70);
 
     if (this.campaign) {
@@ -544,7 +555,7 @@ export class ShopScene extends Phaser.Scene {
         floatAt(cu.sp.x, cu.sp.y - 46, '✨', 'sparkle', 900);
         for (let i = 0; i < 3; i++) this.flyCoin('cbcoin', 180, 120, cu.sp.x + rnd(-6, 6), cu.sp.y - 8, i * 90);
         for (let i = 0; i < 6; i++) {
-          const sp = this.add.image(cu.sp.x, cu.sp.y - 10, 'spark').setTint(i % 2 ? 0xff6ad5 : 0xffe14d).setDepth(950).setScale(rnd(1, 2));
+          const sp = this.add.image(cu.sp.x, cu.sp.y - 10, 'spark').setTint(i % 2 ? 0xff6ad5 : 0xffe14d).setDepth(950).setScale(rnd(1, 2)).setBlendMode(Phaser.BlendModes.ADD);
           const a = (i / 6) * Math.PI * 2;
           this.tweens.add({ targets: sp, x: cu.sp.x + Math.cos(a) * 22, y: cu.sp.y - 10 + Math.sin(a) * 22, alpha: 0, duration: 520, onComplete: () => sp.destroy() });
         }

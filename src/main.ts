@@ -6,6 +6,7 @@ import { ITEMS, ItemId, RULES, estimateDay } from './econ';
 import { DaySummary, RunSummary, S, getLog, hasSave, hooks, log, resetState, save } from './state';
 import { btn, card, confetti, countUp, h, hero, icon, setHud, setModal, stars, toast } from './ui';
 import { artUrl } from './art';
+import { preloadSprites, registerSprites } from './sprites';
 import { BRAND, pricingPanel } from './panels';
 import { music, setMuted, sfx } from './audio';
 import { buildScenery } from './scenery';
@@ -34,12 +35,11 @@ class BootScene extends Phaser.Scene {
     // city buildings and props: sprites rendered from 3D models (see scripts/render-city.cjs)
     for (const k of CITY_SPRITES) this.load.image(`city_${k}`, `city/${k}.png`);
     for (const k of ['cat', 'dog']) this.load.spritesheet(`pet_${k}`, `pets/${k}.png`, { frameWidth: 80, frameHeight: 80 });
+    preloadSprites(this);
   }
   create() {
     for (const [key, canvas] of Object.entries(ART)) this.textures.addCanvas(key, canvas);
-    for (const k of ['hero', 'cust_hunter', 'cust_collector', 'cust_rusher', 'ped_a', 'ped_b', 'bot', 'drone', 'slime', 'guardian']) {
-      this.anims.create({ key: k, frames: [{ key: `${k}_0` }, { key: `${k}_1` }], frameRate: k === 'drone' ? 12 : 5, repeat: -1 });
-    }
+    registerSprites(this);
     // painted backdrops and 3D-rendered sprites are high resolution: smooth them, keep pixel art crisp
     const smooth = ['pillar', 'deco_wood', 'deco_carpet', 'deco_curtains', 'deco_lights', 'pet_cat', 'pet_dog', 'shop_bg', 'city_bg', 'dungeon_bg_0', 'dungeon_bg_1', 'dungeon_bg_2', 'table', 'shadow', 'av_male', 'av_female', ...CITY_SPRITES.map((k) => `city_${k}`)];
     for (const k of smooth) this.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
