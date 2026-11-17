@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import {
-  BASE_IDS, Barter, CTYPES, Customer, ITEMS, ItemId, RULES, approach, barterStep, makeCustomer, reaction, startBarter, takeForShelf,
+  BASE_IDS, Barter, CTYPES, Customer, ITEMS, VIP_LIMIT, ItemId, RULES, approach, barterStep, makeCustomer, reaction, startBarter, takeForShelf,
 } from '../econ';
 import { S, hooks, log, save } from '../state';
 import { btn, floatAt, floatLayer, h, icon, place, setModal, setSheet } from '../ui';
@@ -9,6 +9,8 @@ import { axis, buildControls, resetInput } from '../input';
 import { music, sfx } from '../audio';
 import lines from '../lines.json';
 import { PARTNER_BONUS } from './CityScene';
+import { Pet } from '../pet';
+import { charm, lvl, preorders, shelfCount, vipCount, walkInCount } from '../upgrades';
 
 interface Slot {
   x: number;
@@ -70,6 +72,8 @@ export class ShopScene extends Phaser.Scene {
   private statusEl!: HTMLElement;
   private coachEl!: HTMLElement;
   private fab?: HTMLButtonElement;
+  private pet: Pet | null = null;
+  private preorderSales: { item: ItemId; price: number }[] = [];
 
   constructor() {
     super('shop');
@@ -96,9 +100,15 @@ export class ShopScene extends Phaser.Scene {
     resetInput();
     this.cameras.main.setZoom(2).centerOn(180, 320);
     this.add.image(0, 0, 'shop_bg').setOrigin(0).setScale(0.5).setDepth(-10);
+    // cosmetic upgrades change how the shop looks
+    ['wood', 'carpet', 'curtains', 'lights'].forEach((id, i) => {
+      if (lvl(id)) this.add.image(0, 0, `deco_${id}`).setOrigin(0).setScale(0.5).setDepth(-9.9 + i * 0.1);
+    });
+    this.preorderSales = [];
     this.heroShadow = this.add.image(0, 0, 'shadow').setScale(0.5);
     this.hero = this.add.sprite(180, 84, `av_${S.avatar}`, 0).setScale(0.6);
     this.placeHero(false);
+    this.pet = Pet.maybe(this, 150, 108);
 
     this.time.addEvent({ delay: 2600, loop: true, callback: () => this.pedestrian() });
     this.pedestrian();
@@ -123,11 +133,23 @@ export class ShopScene extends Phaser.Scene {
     }
 
     // shelves
-    const n = S.upgrades.shelf ? RULES.shelfSlotsUpgraded : RULES.shelfSlots;
+    const n = shelfCount();
     const xs = n === 4 ? [120, 240] : [90, 180, 270];
     this.startStock = [...S.stock];
     this.back = [...S.stock];
-    for (const y of [262, 346]) {
+    // pre-orders are collected before the doors open, at 120% of value
+    for (let i = 0; i < preorders() && !this.tutorial && this.back.length > 1; i++) {
+      const item = this.back.splice(Math.floor(Math.random() * this.back.length), 1)[0];
+      const price = Math.round(ITEMS[item].value * 1.2);
+      S.stock.splice(S.stock.indexOf(item), 1);
+      S.coins += price;
+      S.xp += RULES.xpSale;
+      this.revenue += price;
+      this.sales++;
+      this.preorderSales.push({ item, price });
+      log('preorder', { item, price });
+    }
+    for (const y of n === 9 ? [262, 346, 430] : [262, 346]) {
       for (const x of xs) {
         this.add.image(x, y + 4, 'table').setScale(0.5).setDepth(y - 6);
         const tag = h('div', { class: 'tag' });
@@ -154,6 +176,10 @@ export class ShopScene extends Phaser.Scene {
     this.coach(this.tutorial
       ? 'Customers are coming! Watch how they react to your prices.'
       : `Tap the ${BRAND} button to pull in a crowd. Walk up to an empty shelf to restock it.`);
+    if (this.preorderSales.length) {
+      this.coach(`Pre-order${this.preorderSales.length > 1 ? 's' : ''} collected: ${this.preorderSales.map((o) => `${ITEMS[o.item].name} for ${o.price}`).join(', ')}.`);
+      hooks.hud();
+    }
     this.showControls();
     this.refresh();
     void this.runDay();
@@ -162,6 +188,7 @@ export class ShopScene extends Phaser.Scene {
   update(_: number, dms: number) {
     const dt = Math.min(dms, 50) / 1000;
     if (!this.idle && !this.over) this.moveHero(dt);
+    if (!this.idle) this.pet?.follow(dt, this.p.x, this.p.y, this.p.fx, this.p.fy);
     for (const cu of this.custs) {
       cu.sp.setDepth(cu.sp.y);
       cu.sh.setPosition(cu.sp.x, cu.sp.y + 14).setDepth(cu.sp.y - 1);
@@ -275,10 +302,15 @@ export class ShopScene extends Phaser.Scene {
   // ---- the day ----
 
   private async runDay() {
-    const walkIns = RULES.walkIns + (S.upgrades.sign ? RULES.signBonus : 0);
+    const walkIns = walkInCount();
     this.queue = this.tutorial
       ? [{ type: 'rusher', wants: 'gear' }, { type: 'hunter', wants: 'cell' }]
       : Array.from({ length: walkIns }, () => makeCustomer(Math.random, this.pool()));
+    // VIPs come for the best thing in the shop, pay up to 160% and never haggle
+    for (let i = 0; i < vipCount() && !this.tutorial && S.stock.length; i++) {
+      const best = [...S.stock].sort((a, b) => ITEMS[b].value - ITEMS[a].value)[Math.min(i, S.stock.length - 1)];
+      this.queue.splice(1 + Math.floor(Math.random() * this.queue.length), 0, { type: 'collector', wants: best, vip: true });
+    }
     this.total = this.queue.length;
     this.refresh();
     await this.wait(1200);
@@ -308,7 +340,7 @@ export class ShopScene extends Phaser.Scene {
     log('day_end', { tutorial: this.tutorial, revenue: this.revenue, cashback: this.cashback, sales: this.sales, campaign: this.campaign });
     hooks.dayEnded({
       tutorial: this.tutorial, revenue: this.revenue, cashback: this.cashback, sales: this.sales,
-      campaignUsed: this.campaign, customers: this.total, startStock: this.startStock,
+      campaignUsed: this.campaign, customers: this.total, startStock: this.startStock, preorders: this.preorderSales,
     });
   }
 
@@ -316,6 +348,7 @@ export class ShopScene extends Phaser.Scene {
     const key = `cust_${c.type}`;
     const left = Math.random() < 0.5;
     const sp = this.add.sprite(left ? -20 : 380, rnd(565, 600), `${key}_0`).play(key);
+    if (c.vip) sp.setTint(0xffe9a0);
     const cu: Cust = { c, sp, sh: this.add.image(sp.x, sp.y + 14, 'shadow').setScale(0.5) };
     this.custs.push(cu);
     const it = ITEMS[c.wants];
@@ -350,19 +383,22 @@ export class ShopScene extends Phaser.Scene {
       await this.walk(sp, slot.x + (sp.x < slot.x ? -15 : 15), slot.y + 30);
       await this.wait(350);
       const ask = S.prices[c.wants];
-      const r = reaction(ask, it.value);
+      // a charming shop makes every price feel a little fairer
+      const worth = it.value * (1 + charm());
+      const r = reaction(ask, worth);
       this.takeNote(c.wants, r, ask);
-      this.bubble(cu, EMOTE[r].face, EMOTE[r].word, r);
+      if (c.vip) this.bubble(cu, '👑', ask <= worth * VIP_LIMIT ? 'VIP: I’ll take it!' : 'VIP: too much', ask <= worth * VIP_LIMIT ? 'happy' : 'annoyed');
+      else this.bubble(cu, EMOTE[r].face, EMOTE[r].word, r);
       await this.wait(800);
 
-      const a = approach(c.type, ask, it.value);
+      const a = approach(c.type, ask, worth, c.vip);
       let price: number | null = null;
       if (a === 'buy') {
         price = ask;
         if (this.tutorial) this.coach(r === 'delighted' ? 'Sold in a flash! Delighted means you could have asked for more.' : 'Sold at full price! Happy customers pay what you ask.');
       } else if (a === 'barter') {
         this.bubble(cu, '💬', 'Wants to barter', 'wait');
-        price = await this.barter(cu, c.wants, ask);
+        price = await this.barter(cu, c.wants, ask, worth);
       } else {
         sfx('leave');
         if (this.tutorial) this.coach('Annoyed! That price was far too high, so they left. Tap Prices to lower it.');
@@ -423,9 +459,9 @@ export class ShopScene extends Phaser.Scene {
 
   // ---- bartering ----
 
-  private barter(cu: Cust, item: ItemId, ask: number) {
+  private barter(cu: Cust, item: ItemId, ask: number, worth: number) {
     return new Promise<number | null>((res) => {
-      this.haggles.push({ cu, item, b: startBarter(cu.c.type, ask, ITEMS[item].value), line: '', res });
+      this.haggles.push({ cu, item, b: startBarter(cu.c.type, ask, worth), line: '', res });
       this.pump();
     });
   }

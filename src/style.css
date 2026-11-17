@@ -407,3 +407,51 @@ input[type='range'].heat::-moz-range-thumb { width: 1.3em; height: 1.3em; border
 .pillars { gap: 0.35em; }
 .pillars span { flex-direction: row; justify-content: center; gap: 0.3em; font-size: 0.7em; padding: 0.45em 0.2em; border-radius: 99px; background: rgba(20, 22, 31, 0.62); color: #fff; box-shadow: none; backdrop-filter: blur(3px); }
 .pillars b { font-size: 1.15em; }
+
+/* upgrade tree */
+.card.tree { padding: 0.9em; display: flex; flex-direction: column; max-height: 100%; }
+.treehead { display: flex; justify-content: space-between; align-items: center; }
+.treehead h2 { margin: 0; }
+.treehead .pill { background: var(--sb-bg); box-shadow: none; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3em; margin: 0.6em 0 0.2em; }
+.tab { font-family: var(--display); font-weight: 600; font-size: 0.68em; color: var(--sb-ink-2); background: var(--sb-bg); border: 0; border-radius: 0.8em; padding: 0.5em 0.1em; display: flex; flex-direction: column; align-items: center; gap: 0.1em; cursor: pointer; }
+.tab span { font-size: 1.6em; line-height: 1.1; }
+.tab.on { background: var(--sb-grad); color: #fff; box-shadow: 0 0.2em 0 #a51d4f; }
+.nodes { overflow-y: auto; flex: 1; min-height: 0; margin: 0.2em -0.2em 0.4em; padding: 0 0.2em; }
+.node { position: relative; display: flex; align-items: center; gap: 0.6em; background: var(--sb-bg); border: 0.12em solid transparent; border-radius: 0.9em; padding: 0.55em 0.6em; margin-top: 0.4em; }
+.node.d1 { margin-left: 1.3em; }
+.node.d2 { margin-left: 2.6em; }
+.node.d1::before, .node.d2::before { content: ''; position: absolute; left: -0.85em; top: -0.55em; width: 0.7em; height: 1.9em; border-left: 0.14em solid #cfd4df; border-bottom: 0.14em solid #cfd4df; border-radius: 0 0 0 0.5em; }
+.node.full { background: var(--sb-green-bg); border-color: var(--sb-green); }
+.node.lock { opacity: 0.62; }
+.nemoji { font-size: 1.6em; line-height: 1; width: 1.3em; text-align: center; flex: none; }
+.ntext { flex: 1; min-width: 0; }
+.nname { display: flex; align-items: center; gap: 0.5em; flex-wrap: wrap; }
+.nname b { font-family: var(--display); font-weight: 600; font-size: 0.92em; line-height: 1.2; }
+.ntext small { display: block; line-height: 1.35; color: var(--sb-ink-2); }
+.pips { display: inline-flex; gap: 0.2em; }
+.pips i { width: 0.55em; height: 0.55em; border-radius: 50%; background: #cfd4df; }
+.pips i.on { background: var(--sb-yellow); box-shadow: 0 0 0 0.08em #c98a00; }
+.btn.buy { width: auto; margin: 0 0 0.2em; padding: 0.4em 0.7em; background: linear-gradient(180deg, #ff6a4a, var(--sb-red)); border: 0; color: #fff; box-shadow: 0 0.2em 0 #b5321b; font-size: 0.85em; flex: none; }
+.btn.buy:disabled { background: #b9bfcc; box-shadow: 0 0.2em 0 #8f96a6; opacity: 1; }
+.maxed { font-family: var(--display); font-weight: 700; font-size: 0.78em; color: var(--sb-green); flex: none; }
+.locked { flex: none; }
+.btn.small.upg { position: relative; font-family: var(--display); color: #fff; background: var(--sb-grad); border: 0; box-shadow: 0 0.15em 0 #a51d4f; }
+.upg .dot { position: absolute; top: -0.25em; right: -0.25em; width: 0.8em; height: 0.8em; border-radius: 50%; background: var(--sb-yellow); border: 0.12em solid #fff; animation: pulse 0.9s ease-in-out infinite; }
+
+/* companion picker */
+.avatar small { line-height: 1.3; padding: 0 0.3em; }
+.avatar.picked { border-color: var(--sb-red); background: #fff1ee; }
+.namerow { display: flex; align-items: center; gap: 0.6em; margin: 0.7em 0 0.2em; font-family: var(--display); font-weight: 600; font-size: 0.9em; }
+.petname { flex: 1; min-width: 0; font: inherit; font-size: 1.05em; color: var(--sb-ink); background: var(--sb-bg); border: 0.12em solid var(--sb-line); border-radius: 0.7em; padding: 0.5em 0.7em; user-select: text; -webkit-user-select: text; }
+.petname:focus { outline: none; border-color: var(--sb-red); }
+
+/* dungeon: shield pips, pet saddlebag slots, homing run */
+.shieldpip { font-size: 0.8em; line-height: 1; margin-left: 0.1em; }
+.slot.petslot { border-color: #c98a00; border-style: dashed; }
+.bag { flex-wrap: wrap; max-width: 13.5em; }
+#float > .courier { pointer-events: auto; }
+.courier { position: absolute; right: 0.45em; top: 5.4em; font: inherit; color: #fff; background: rgba(12, 13, 31, 0.82); border: 0.12em solid var(--sb-yellow); border-radius: 0.8em; padding: 0.3em 0.6em; display: flex; align-items: center; gap: 0.4em; cursor: pointer; }
+.courier b { font-size: 1.1em; }
+.courier small { color: #fff; font-family: var(--display); font-weight: 600; font-size: 0.66em; }
+.courier.off { opacity: 0.35; pointer-events: none; }

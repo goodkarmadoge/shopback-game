@@ -54,8 +54,8 @@
         return r;
       }
 
-      function camera(height, pitchDeg, aspect = 1) {
-        const half = height * 0.56;
+      function camera(height, pitchDeg, aspect = 1, zoom = 0.56) {
+        const half = height * zoom;
         const cam = new THREE.OrthographicCamera(-half * aspect, half * aspect, half, -half, 0.01, 100);
         const p = (pitchDeg * Math.PI) / 180;
         cam.position.set(0, height * 0.5 + Math.sin(p) * 10, Math.cos(p) * 10);
@@ -161,6 +161,24 @@
         ctx.drawImage(r.domElement, 0, 0, W, H);
         r.dispose();
         return { png: out.toDataURL('image/png'), w: W, h: H, size: size.toArray() };
+      };
+      // Static companions: one row of 8 facing directions (0 = toward the camera, clockwise).
+      window.renderTurn = async (url, cell, pitchDeg) => {
+        const m = await load(url);
+        const SS = 3;
+        const r = renderer(cell * SS, cell * SS);
+        const cam = camera(m.height, pitchDeg);
+        const out = document.createElement('canvas');
+        out.width = cell * DIRS;
+        out.height = cell;
+        const ctx = out.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        for (let d = 0; d < DIRS; d++) {
+          m.pivot.rotation.y = (-d * Math.PI * 2) / DIRS;
+          r.render(m.scene, cam);
+          ctx.drawImage(r.domElement, d * cell, 0, cell, cell);
+        }
+        return { png: out.toDataURL('image/png'), size: m.info.size };
       };
       window.ready = true;
     </script>

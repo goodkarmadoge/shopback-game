@@ -89,6 +89,8 @@ export function mulberry32(seed: number): Rng {
 export interface Customer {
   type: CType;
   wants: ItemId;
+  /** VIPs pay up to 160% of value and never haggle. */
+  vip?: boolean;
 }
 
 const pick = <T>(arr: readonly T[], rng: Rng): T => arr[Math.floor(rng() * arr.length)];
@@ -142,7 +144,10 @@ export function barterStep(b: Barter, counter: number): BarterResult {
 }
 
 /** Does this customer open a barter, buy outright, or walk? */
-export function approach(type: CType, ask: number, value: number): 'buy' | 'barter' | 'leave' {
+export const VIP_LIMIT = 1.6;
+
+export function approach(type: CType, ask: number, value: number, vip = false): 'buy' | 'barter' | 'leave' {
+  if (vip) return ask <= value * VIP_LIMIT ? 'buy' : 'leave';
   const r = reaction(ask, value);
   if (r === 'annoyed') return 'leave';
   if (r === 'delighted') return 'buy';

@@ -15,6 +15,8 @@ import { CITY_SPRITES, CityScene, PARTNERS, PARTNER_BONUS } from './scenes/CityS
 import { DungeonScene } from './scenes/DungeonScene';
 import offerData from './offers.json';
 import { INTRO, UNLOCK_INFO, Unlock } from './levels';
+import { PET_INFO } from './pet';
+import { BRANCHES, Branch, NODES, anyAffordable, buy, costOf, lockReason, lvl, maxed, shelfCount, storageCap, walkInCount } from './upgrades';
 
 // ---- boot ----
 
@@ -30,6 +32,7 @@ class BootScene extends Phaser.Scene {
     for (const a of ['male', 'female']) this.load.spritesheet(`av_${a}`, `avatars/${a}.png`, { frameWidth: 96, frameHeight: 96 });
     // city buildings and props: sprites rendered from 3D models (see scripts/render-city.cjs)
     for (const k of CITY_SPRITES) this.load.image(`city_${k}`, `city/${k}.png`);
+    for (const k of ['cat', 'dog']) this.load.spritesheet(`pet_${k}`, `pets/${k}.png`, { frameWidth: 80, frameHeight: 80 });
   }
   create() {
     for (const [key, canvas] of Object.entries(ART)) this.textures.addCanvas(key, canvas);
@@ -37,7 +40,7 @@ class BootScene extends Phaser.Scene {
       this.anims.create({ key: k, frames: [{ key: `${k}_0` }, { key: `${k}_1` }], frameRate: k === 'drone' ? 12 : 5, repeat: -1 });
     }
     // painted backdrops and 3D-rendered sprites are high resolution: smooth them, keep pixel art crisp
-    const smooth = ['pillar', 'shop_bg', 'city_bg', 'dungeon_bg_0', 'dungeon_bg_1', 'dungeon_bg_2', 'table', 'shadow', 'av_male', 'av_female', ...CITY_SPRITES.map((k) => `city_${k}`)];
+    const smooth = ['pillar', 'deco_wood', 'deco_carpet', 'deco_curtains', 'deco_lights', 'pet_cat', 'pet_dog', 'shop_bg', 'city_bg', 'dungeon_bg_0', 'dungeon_bg_1', 'dungeon_bg_2', 'table', 'shadow', 'av_male', 'av_female', ...CITY_SPRITES.map((k) => `city_${k}`)];
     for (const k of smooth) this.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
     title();
   }
@@ -61,6 +64,7 @@ const game = new Phaser.Game({
 });
 
 function go(key: 'shop' | 'dungeon' | 'city', data: object = {}) {
+  if (!(data as { idle?: boolean }).idle) stopShowcase(); // real play always ends the welcome slideshow
   game.scene.stop('shop');
   game.scene.stop('city');
   game.scene.stop('dungeon');
@@ -95,6 +99,7 @@ function hud(label = `Day ${S.day}`) {
       h('span', { class: 'bar' }, h('i', { style: `width:${pct}%` })),
       h('small', {}, S.level >= 2 ? `${S.xp} XP` : `${shownXp}/${RULES.xpLevel2} XP`)),
     h('span', { class: 'pill' }, label),
+    label.startsWith('Evening') ? btn(['⬆ Upgrades', anyAffordable() ? h('i', { class: 'dot' }) : null], () => { sfx('tap'); upgradeTree(() => { setModal(null); hooks.hud(); }); }, 'small upg') : null,
   ));
 }
 let hudLabel = '';
@@ -164,7 +169,7 @@ function avatarSelect() {
     sfx('tap');
     log('avatar', { avatar: a });
     go('shop', { idle: true });
-    interests();
+    petSelect();
   };
   const option = (a: 'male' | 'female', label: string) => {
     // a rendered portrait shows at once; the live 3D model fades in over it when loaded
@@ -184,6 +189,36 @@ function avatarSelect() {
   setModal(card('Choose your shopkeeper',
     h('p', {}, 'Who is running the shop?'),
     h('div', { class: 'avatars' }, option('male', 'Shopkeeper A'), option('female', 'Shopkeeper B'))));
+}
+
+function petSelect() {
+  let kind: 'cat' | 'dog' = 'cat';
+  const name = h('input', { class: 'petname', type: 'text', maxlength: '12', value: PET_INFO.cat.name, 'aria-label': 'Pet name', autocomplete: 'off' });
+  let typed = false;
+  name.addEventListener('input', () => (typed = true));
+  const cards = (['cat', 'dog'] as const).map((k) => {
+    const el = h('button', { class: `avatar ${k === kind ? 'picked' : ''}`, type: 'button', 'aria-pressed': String(k === kind) },
+      h('div', { class: 'avstage' }, h('img', { src: `pets/${k}-portrait.png`, alt: '', draggable: 'false' })),
+      h('b', {}, PET_INFO[k].label), h('small', {}, PET_INFO[k].blurb));
+    el.addEventListener('click', () => {
+      kind = k;
+      sfx('tap');
+      cards.forEach((c, i) => { const on = (['cat', 'dog'] as const)[i] === k; c.classList.toggle('picked', on); c.setAttribute('aria-pressed', String(on)); });
+      if (!typed) name.value = PET_INFO[k].name;
+    });
+    return el;
+  });
+  setModal(card('Choose your companion',
+    h('p', {}, 'They follow you everywhere, and fight beside you in the dungeon.'),
+    h('div', { class: 'avatars' }, ...cards),
+    h('label', { class: 'namerow' }, h('span', {}, 'Name'), name),
+    btn('This one! ▶', () => {
+      S.pet = { kind, name: name.value.trim().slice(0, 12) || PET_INFO[kind].name };
+      save();
+      sfx('deal');
+      log('pet', { kind });
+      interests();
+    }, 'primary')));
 }
 
 function interests() {
@@ -283,7 +318,14 @@ function dungeonIntro() {
 
 hooks.runEnded = (r: RunSummary) => {
   go('shop', { idle: true });
-  S.stock.push(...r.bag);
+  // everything carried out, plus whatever the pet already ran home
+  const haul = [...r.banked, ...r.bag].sort((x, y) => ITEMS[y].value - ITEMS[x].value);
+  const room = Math.max(0, storageCap() - S.stock.length);
+  const kept = haul.slice(0, room);
+  const overflow = haul.slice(room);
+  const scrap = overflow.reduce((sum, i) => sum + Math.round(ITEMS[i].value * 0.5), 0);
+  S.stock.push(...kept);
+  S.coins += scrap;
   S.phase = 'morning';
   // clearing an introduction level moves you on and may unlock something
   let unlocked: Unlock | undefined;
@@ -309,9 +351,11 @@ hooks.runEnded = (r: RunSummary) => {
     h('div', { class: 'tiles' },
       h('span', {}, h('b', {}, `${r.rooms}/${r.total}`), h('small', {}, 'Rooms')),
       h('span', {}, h('b', {}, `+${r.rooms * RULES.xpRoom + levelBonus}`), h('small', {}, 'XP')),
-      h('span', {}, h('b', {}, r.bag.length), h('small', {}, 'Loot'))),
+      h('span', {}, h('b', {}, haul.length), h('small', {}, 'Loot'))),
     info && h('div', { class: 'reward new' }, h('span', {}, info.emoji), h('div', {}, h('b', {}, `Unlocked: ${info.name}`), h('small', {}, info.text))),
-    r.bag.length ? lootRow(r.bag) : h('p', { class: 'fine' }, 'Your bag is empty.'),
+    haul.length ? lootRow(haul) : h('p', { class: 'fine' }, 'Your bag is empty.'),
+    r.banked.length && S.pet ? h('p', { class: 'fine' }, `${S.pet.name} ran ${r.banked.length} of these home safely.`) : null,
+    overflow.length ? h('p', { class: 'fine' }, `Stock room full (${storageCap()}). ${overflow.length} sold for scrap: +${scrap} coins.`) : null,
     r.lost.length ? h('p', { class: 'fine' }, `Lost: ${r.lost.map((i) => ITEMS[i].name).join(', ')}`) : null,
     btn('Continue ▶', () => { sfx('tap'); offerCard(); }, 'primary')));
   if (r.complete) confetti(unlocked ? 48 : 30);
@@ -357,7 +401,7 @@ function morning() {
   S.phase = 'morning';
   save();
   hud((hudLabel = `Day ${S.day + 1}`));
-  const slots = S.upgrades.shelf ? RULES.shelfSlotsUpgraded : RULES.shelfSlots;
+  const slots = shelfCount();
   setModal(pricingPanel('Morning: stock and price',
     `Last night’s loot is on the shelves: ${S.stock.length} items, ${slots} on display at a time. Price each one. Too high and customers leave; too low and you leave money on the table.`,
     'Open the shop', () => {
@@ -371,8 +415,8 @@ function morning() {
 
 function summary(d: DaySummary) {
   const profit = d.revenue - d.cashback;
-  const base = { stock: d.startStock, prices: S.prices, slots: S.upgrades.shelf ? RULES.shelfSlotsUpgraded : RULES.shelfSlots };
-  const walkIns = RULES.walkIns + (S.upgrades.sign ? RULES.signBonus : 0);
+  const base = { stock: d.startStock, prices: S.prices, slots: shelfCount() };
+  const walkIns = walkInCount();
   const without = estimateDay({ ...base, customers: walkIns, campaign: false });
   const withC = estimateDay({ ...base, customers: walkIns * RULES.campaignMult + S.partners.length * PARTNER_BONUS, campaign: true });
   const other = d.campaignUsed ? without.profit : withC.profit;
@@ -441,32 +485,59 @@ function levelCheck() {
 
 // ---- upgrade ----
 
+let treeTab: Branch = 'store';
+
+/** The upgrade tree: four branches, bought with coins. */
+function upgradeTree(onDone: () => void) {
+  const render = () => {
+    const branch = BRANCHES.find((b) => b.id === treeTab)!;
+    const nodes = NODES.filter((n) => n.branch === treeTab);
+    // children sit under the node they need, so the tree reads top to bottom
+    const ordered: { n: (typeof NODES)[number]; depth: number }[] = [];
+    const add = (parent: string | undefined, depth: number) =>
+      nodes.filter((n) => n.needs === parent).forEach((n) => { ordered.push({ n, depth }); add(n.id, depth + 1); });
+    add(undefined, 0);
+    const rows = ordered.map(({ n, depth }) => {
+      const level = lvl(n.id);
+      const full = maxed(n.id);
+      const lock = lockReason(n.id);
+      const cost = costOf(n.id);
+      const pips = h('span', { class: 'pips', 'aria-label': `Level ${level} of ${n.levels.length}` },
+        ...n.levels.map((_, i) => h('i', { class: i < level ? 'on' : '' })));
+      const action = full ? h('span', { class: 'maxed' }, 'MAX')
+        : lock ? h('span', { class: 'locked' }, '🔒')
+        : btn([icon('coin', 'ico s'), h('b', {}, cost)], () => {
+          if (!buy(n.id)) return;
+          sfx('level');
+          hooks.hud();
+          render();
+        }, 'buy');
+      if (action instanceof HTMLButtonElement) action.disabled = S.coins < cost;
+      return h('div', { class: `node d${Math.min(depth, 2)} ${full ? 'full' : ''} ${lock ? 'lock' : ''}` },
+        h('span', { class: 'nemoji' }, n.emoji),
+        h('div', { class: 'ntext' },
+          h('div', { class: 'nname' }, h('b', {}, n.name), pips),
+          h('small', {}, full ? n.levels[level - 1] : lock ?? n.levels[level])),
+        action);
+    });
+    setModal(h('div', { class: 'card tree' },
+      h('div', { class: 'treehead' }, h('h2', {}, 'Upgrades'), h('span', { class: 'pill' }, icon('coin', 'ico s'), h('b', {}, S.coins))),
+      h('div', { class: 'tabs', role: 'tablist' }, ...BRANCHES.map((b) => {
+        const t = h('button', { class: `tab ${b.id === treeTab ? 'on' : ''}`, type: 'button', role: 'tab', 'aria-selected': String(b.id === treeTab) }, h('span', {}, b.emoji), b.name);
+        t.addEventListener('click', () => { treeTab = b.id; sfx('tap'); render(); });
+        return t;
+      })),
+      h('p', { class: 'fine' }, treeTab === 'pet' && S.pet ? `${S.pet.name}: ${branch.blurb.replace('Your companion', 'your companion')}` : branch.blurb),
+      h('div', { class: 'nodes' }, ...rows),
+      btn('Done', () => { sfx('tap'); onDone(); }, 'primary')));
+  };
+  render();
+}
+
 function upgrade() {
   go('shop', { idle: true });
   hud((hudLabel = `Day ${S.day + 1}`));
-  const defs: { id: keyof typeof S.upgrades; name: string; text: string; emoji: string }[] = [
-    { id: 'shelf', name: 'Extra shelf', text: 'Shelf slots go from 4 to 6', emoji: '🗄️' },
-    { id: 'sign', name: 'Shop sign', text: 'Two more walk-in customers a day', emoji: '🪧' },
-    { id: 'wrench', name: 'Charged wrench', text: 'Each hit deals one more damage', emoji: '🔧' },
-  ];
-  const can = S.coins >= RULES.upgradeCost;
-  const open = defs.filter((u) => !S.upgrades[u.id]);
-  const rows = open.map((u) => {
-    const b = btn([h('span', { class: 'uemoji' }, u.emoji), h('span', { class: 'utext' }, h('b', {}, u.name), h('small', {}, u.text)), h('span', { class: 'ucost' }, icon('coin', 'ico s'), RULES.upgradeCost)], () => {
-      S.coins -= RULES.upgradeCost;
-      S.upgrades[u.id] = true;
-      sfx('level');
-      log('upgrade', { id: u.id });
-      toast(`${u.name} installed.`);
-      endCard();
-    }, 'upgrade');
-    b.disabled = !can;
-    return b;
-  });
-  setModal(card('Pick one upgrade',
-    h('p', {}, can ? `You have ${S.coins} coins. Each upgrade costs ${RULES.upgradeCost}.` : `Each upgrade costs ${RULES.upgradeCost} coins and you have ${S.coins}. Keep selling and come back for it.`),
-    ...rows,
-    btn(can ? 'Skip for now' : 'Continue ▶', () => { sfx('tap'); endCard(); }, can ? 'ghost' : 'primary')));
+  upgradeTree(endCard);
 }
 
 // ---- the end of the loop ----
@@ -478,7 +549,7 @@ function endCard() {
   log('loop_complete', { day: S.day, coins: S.coins, xp: S.xp });
   setModal(h('div', { class: 'card pop' },
     hero('Loop complete', 'See you tomorrow!', 'Fight, price, sell, upgrade: that is one full loop. In the app, play is capped at one loop a day, so the shop is always waiting.'),
-    h('div', { class: 'stats' }, stat('Coins', S.coins), stat('Shop level', S.level), stat('Dungeon', S.dungeonLevel >= INTRO.length ? 'Daily unlocked' : `Level ${S.dungeonLevel} of ${INTRO.length}`), stat('Local partners', `${S.partners.length} of ${PARTNERS.length}`), stat('Shop List', `${S.shopList.length} saved`)),
+    h('div', { class: 'stats' }, stat('Coins', S.coins), stat('Shop level', S.level), S.pet ? stat('Companion', `${S.pet.name} the ${PET_INFO[S.pet.kind].label}`) : null, stat('Dungeon', S.dungeonLevel >= INTRO.length ? 'Daily unlocked' : `Level ${S.dungeonLevel} of ${INTRO.length}`), stat('Local partners', `${S.partners.length} of ${PARTNERS.length}`), stat('Shop List', `${S.shopList.length} saved`)),
     btn('Play the next day ▶', () => { sfx('tap'); S.day++; S.phase = 'dungeon'; save(); city(); }, 'primary'),
     btn('Download event log', downloadLog),
     btn('Start over', () => { resetState(); title(); go('shop', { idle: true }); }, 'ghost')));

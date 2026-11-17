@@ -563,7 +563,85 @@ function buildPillar() {
   ART.pillar = cv;
 }
 
+// Cosmetic shop upgrades, each a transparent layer over the shop backdrop.
+function buildDeco() {
+  // polished wood finish: a deeper, glossier floor
+  let c = board('deco_wood');
+  rect(c, 16, 100, 328, 404, 'rgba(110, 44, 16, 0.34)');
+  for (let y = 100; y < 504; y += 13) rect(c, 16, y + 1, 328, 2, 'rgba(255, 220, 170, 0.16)');
+  for (let x = 40; x < 340; x += 70) rect(c, x, 100, 26, 404, linear(c, x, 0, x + 26, 0, [0, 'rgba(255,255,255,0)'], [0.5, 'rgba(255,240,210,0.13)'], [1, 'rgba(255,255,255,0)']));
+  rect(c, 16, 100, 328, 30, linear(c, 0, 100, 0, 130, [0, 'rgba(40,16,4,0.3)'], [1, 'rgba(40,16,4,0)']));
+
+  // fine carpet: crimson and gold over the old rug
+  c = board('deco_carpet');
+  c.fillStyle = '#7a1420';
+  c.beginPath();
+  c.roundRect(50, 208, 260, 198, 5);
+  c.fill();
+  rect(c, 55, 213, 250, 188, '#c9a23a');
+  rect(c, 59, 217, 242, 180, '#a31c2c');
+  rect(c, 65, 223, 230, 168, '#c4283a');
+  for (let x = 72; x < 290; x += 22) {
+    for (let y = 232; y < 384; y += 22) {
+      c.fillStyle = 'rgba(233, 196, 90, 0.75)';
+      c.beginPath();
+      c.moveTo(x + 6, y);
+      c.lineTo(x + 12, y + 6);
+      c.lineTo(x + 6, y + 12);
+      c.lineTo(x, y + 6);
+      c.fill();
+      rect(c, x + 5, y + 5, 2, 2, '#7a1420');
+    }
+  }
+  for (let x = 52; x < 308; x += 4) {
+    rect(c, x, 203, 1.6, 5, '#e9c45a');
+    rect(c, x, 406, 1.6, 5, '#e9c45a');
+  }
+  rect(c, 65, 223, 230, 168, linear(c, 0, 223, 0, 391, [0, 'rgba(255,255,255,0.1)'], [1, 'rgba(40,0,10,0.2)']));
+
+  // curtains on both windows
+  c = board('deco_curtains');
+  for (const x of [34, 278]) {
+    rect(c, x - 7, 22, 62, 4, '#c98552');
+    rect(c, x - 9, 21, 4, 6, '#e0a868');
+    rect(c, x + 53, 21, 4, 6, '#e0a868');
+    for (const side of [0, 1]) {
+      const cx = side ? x + 34 : x - 5;
+      for (let k = 0; k < 5; k++) rect(c, cx + k * 3.8, 26, 3.8, 52 - Math.abs(k - (side ? 4 : 0)) * 3, k % 2 ? '#d6455a' : '#b82e44');
+      rect(c, cx, 26, 19, 3, 'rgba(255,255,255,0.25)');
+      rect(c, cx + (side ? 0 : 11), 58, 8, 3, '#e9c45a');
+    }
+  }
+
+  // string lights along the back wall, with a warm glow
+  c = board('deco_lights');
+  c.strokeStyle = '#3a1a0c';
+  c.lineWidth = 0.8;
+  const bulbs = ['#ffd84a', '#ff7a59', '#6ddc8c', '#35c8e8', '#ff6ad5'];
+  for (let seg = 0; seg < 6; seg++) {
+    const x0 = seg * 60;
+    c.beginPath();
+    c.moveTo(x0, 13);
+    c.quadraticCurveTo(x0 + 30, 26, x0 + 60, 13);
+    c.stroke();
+    for (let k = 1; k < 4; k++) {
+      const t = k / 4;
+      const bx = x0 + t * 60;
+      const by = 13 + 13 * 2 * t * (1 - t) + 1.5;
+      const col = bulbs[(seg * 3 + k) % bulbs.length];
+      pool(c, bx, by + 1, 9, col + 'aa', col + '00');
+      c.fillStyle = col;
+      c.beginPath();
+      c.ellipse(bx, by + 1.5, 2, 2.8, 0, 0, Math.PI * 2);
+      c.fill();
+      rect(c, bx - 0.6, by, 0.9, 1.2, 'rgba(255,255,255,0.8)');
+    }
+  }
+  pool(c, 180, 150, 220, 'rgba(255, 214, 120, 0.12)', 'rgba(255, 214, 120, 0)', 0.7);
+}
+
 export function buildScenery() {
+  buildDeco();
   buildPillar();
   buildShop();
   buildTable();

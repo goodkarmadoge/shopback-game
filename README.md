@@ -32,6 +32,15 @@ npm run build
 8. **Close:** revenue, cashback and profit, next to an estimate of the day without the campaign.
 9. **Upgrade,** then the "come back tomorrow" card.
 
+## Companion and upgrades
+
+- **Companion:** after choosing a shopkeeper you pick and name a pet, a lucky cat or a black-and-tan shiba. It follows you in the shop and city and attacks enemies in the dungeon. Models are in `assets-src/pets/`, rendered to sprites with `node scripts/render-pets.cjs`.
+- **Upgrade tree** (`src/upgrades.ts`): four branches bought with coins, opened after each shop day and from the Upgrades button in the city.
+  - **Store:** shelves (4, 6, 9), storage, shop sign, pre-orders, VIP customers, and four cosmetics that change the shop's look and make customers tolerate higher prices.
+  - **Combat:** melee damage, hearts, energy shield, heal on room clear, roll cooldown, bow damage.
+  - **Backpack:** loot slots, 6 up to 12.
+  - **Pet:** damage, attack speed, a saddlebag for extra loot, and the homing run, which sends the pet back to the store with your bag so that loot is safe even if you fall.
+
 ## Dungeon progression
 
 - **Five introduction levels**, one per night. Level 1 unlocks auto attack, Level 3 unlocks the bow (drag the bow button to aim, release to fire; L on desktop), Level 5 is the Vault Guardian.

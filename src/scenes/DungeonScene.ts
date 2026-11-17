@@ -4,6 +4,8 @@ import { S, hooks, log, save } from '../state';
 import { btn, card, floatAt, floatLayer, h, icon, place, setHud, setModal, setSheet } from '../ui';
 import { aiming, axis, buildControls, consume, press, resetInput, takeShot } from '../input';
 import { Block, INTRO, Kind, RoomDef, dailyDungeon } from '../levels';
+import { Pet } from '../pet';
+import { bagSlots, bowDamage, bowReload, hasCourier, maxHearts, meleeBonus, petAttackGap, petBagSlots, petDamage, regenHearts, rollCooldown, shieldHits } from '../upgrades';
 import { music, sfx } from '../audio';
 
 
@@ -54,7 +56,15 @@ export class DungeonScene extends Phaser.Scene {
   private room = 0;
   private cleared = 0;
   private bag: ItemId[] = [];
-  private hp = RULES.hearts;
+  private hp = 5;
+  private shield = 0;
+  private banked: ItemId[] = [];
+  private pet: Pet | null = null;
+  private petState: 'follow' | 'attack' | 'away' = 'follow';
+  private petTarget: Enemy | null = null;
+  private petCd = 0;
+  private petAway = 0;
+  private courierBtn?: HTMLElement;
   private paused = false;
   private ended = false;
   private bg!: Phaser.GameObjects.Image;
@@ -96,7 +106,13 @@ export class DungeonScene extends Phaser.Scene {
     this.room = 0;
     this.cleared = 0;
     this.bag = [];
-    this.hp = RULES.hearts;
+    this.hp = maxHearts();
+    this.shield = shieldHits();
+    this.banked = [];
+    this.petState = 'follow';
+    this.petTarget = null;
+    this.petCd = 1;
+    this.petAway = 0;
     this.paused = this.ended = false;
     this.enemies = [];
     this.pickups = [];
@@ -111,8 +127,15 @@ export class DungeonScene extends Phaser.Scene {
     this.hero = this.add.sprite(180, 520, `av_${S.avatar}`, 0).setScale(0.6);
     this.input.on('pointerdown', () => press('attack'));
     setSheet(buildControls(S.unlocks.bow));
+    this.pet = Pet.maybe(this, 160, 540);
+    if (hasCourier()) {
+      this.courierBtn = h('button', { class: 'courier', type: 'button' }, h('b', {}, '🏠'), h('small', {}, `Send ${S.pet!.name} home`));
+      this.courierBtn.addEventListener('click', () => this.sendHome());
+      floatLayer.append(this.courierBtn);
+    }
     this.events.once('shutdown', () => {
       this.choice?.remove();
+      this.courierBtn?.remove();
       setSheet(null);
     });
     this.enterRoom(0);
@@ -140,6 +163,7 @@ export class DungeonScene extends Phaser.Scene {
     Object.assign(this.p, { x: 180, y: 520, fx: 0, fy: -1, atk: 0, roll: 0, kx: 0, ky: 0, inv: 0.6 });
     for (const [kind, x, y] of def.spawns) this.spawn(kind, x, y);
     floatAt(180, 330, `${this.levelName} · ${def.name}`, 'banner dark', 1800);
+    this.shield = shieldHits();
     this.renderHud();
   }
 
@@ -157,6 +181,11 @@ export class DungeonScene extends Phaser.Scene {
     S.xp += RULES.xpRoom;
     save();
     sfx('deal');
+    const heal = Math.min(regenHearts(), maxHearts() - this.hp);
+    if (heal > 0) {
+      this.hp += heal;
+      floatAt(this.p.x, this.p.y - 40, `+${heal} ♥`, 'gain big', 1100);
+    }
     log('room_cleared', { room: this.room + 1, hearts: this.hp });
     floatAt(180, 150, `Room clear! +${RULES.xpRoom} XP`, 'banner dark', 1600);
     const sp = this.add.image(180, 260, 'chest_0').setDepth(200);
@@ -191,17 +220,27 @@ export class DungeonScene extends Phaser.Scene {
 
   // ---- HUD ----
 
+  /** Total loot the party can carry: the backpack plus the pet's saddlebag while it is here. */
+  private capacity() {
+    return bagSlots() + (this.petState === 'away' ? 0 : petBagSlots());
+  }
+
   private renderHud() {
-    const hearts = h('div', { class: 'hearts', 'aria-label': `${this.hp} of ${RULES.hearts} hearts` });
-    for (let i = 0; i < RULES.hearts; i++) hearts.append(icon(i < this.hp ? 'heart' : 'heart_empty', 'ico s'));
-    const bag = h('div', { class: 'bag', 'aria-label': `Loot bag ${this.bag.length} of ${RULES.bagSlots}` });
-    for (let i = 0; i < RULES.bagSlots; i++) bag.append(h('span', { class: 'slot' }, this.bag[i] ? icon(`item_${this.bag[i]}`, 'ico s') : null));
+    const max = maxHearts();
+    const hearts = h('div', { class: 'hearts', 'aria-label': `${this.hp} of ${max} hearts${this.shield ? `, ${this.shield} shield` : ''}` });
+    for (let i = 0; i < max; i++) hearts.append(icon(i < this.hp ? 'heart' : 'heart_empty', 'ico s'));
+    for (let i = 0; i < this.shield; i++) hearts.append(h('span', { class: 'shieldpip' }, '🛡️'));
+    const cap = this.capacity();
+    const own = bagSlots();
+    const bag = h('div', { class: 'bag', 'aria-label': `Loot bag ${this.bag.length} of ${cap}` });
+    for (let i = 0; i < cap; i++) bag.append(h('span', { class: `slot ${i >= own ? 'petslot' : ''}` }, this.bag[i] ? icon(`item_${this.bag[i]}`, 'ico s') : null));
     const boss = this.enemies.find((e) => e.kind === 'guardian');
     setHud(h('div', { class: 'dhud' },
       h('div', { class: 'drow' }, hearts, h('span', { class: 'roomno' }, `${this.levelName} · ${this.room + 1}/${this.plan.length}`)),
-      h('div', { class: 'drow bagrow' }, h('small', {}, `Bag ${this.bag.length} of ${RULES.bagSlots}`), bag),
+      h('div', { class: 'drow bagrow' }, h('small', {}, `Bag ${this.bag.length}/${cap}${this.banked.length ? ` · ${this.banked.length} safe` : ''}`), bag),
       boss ? h('div', { class: 'boss' }, h('small', {}, `Vault Guardian · ${boss.hp} of ${this.bossMax}`), h('div', { class: 'bar' }, h('i', { style: `width:${(boss.hp / this.bossMax) * 100}%` }))) : null,
     ));
+    if (this.courierBtn) this.courierBtn.classList.toggle('off', this.petState === 'away' || !this.bag.length);
   }
 
   // ---- loop ----
@@ -215,6 +254,7 @@ export class DungeonScene extends Phaser.Scene {
     this.updBullets(dt);
     this.updBow(dt);
     this.updArrows(dt);
+    this.updPet(dt);
     this.updPickups();
     if (this.chest && !this.chest.open && Math.hypot(this.p.x - 180, this.p.y - 260) < 30) this.openChest();
   }
@@ -247,7 +287,7 @@ export class DungeonScene extends Phaser.Scene {
 
     if (consume('dodge') && p.rollCd <= 0 && p.roll <= 0) {
       p.roll = 0.26;
-      p.rollCd = 0.7;
+      p.rollCd = rollCooldown();
       p.rdx = p.fx;
       p.rdy = p.fy;
       sfx('roll');
@@ -291,7 +331,7 @@ export class DungeonScene extends Phaser.Scene {
     }
     const heavy = p.combo === 3;
     const range = heavy ? 54 : 44;
-    const dmg = 1 + (S.upgrades.wrench ? 1 : 0) + (heavy ? 1 : 0);
+    const dmg = 1 + meleeBonus() + (heavy ? 1 : 0);
     sfx('swing');
     p.kx += p.fx * 60;
     p.ky += p.fy * 60;
@@ -357,6 +397,15 @@ export class DungeonScene extends Phaser.Scene {
   private hurt(fromX: number, fromY: number) {
     const p = this.p;
     if (p.inv > 0 || p.roll > 0 || this.ended) return;
+    if (this.shield > 0) {
+      // the energy shield soaks the hit
+      this.shield--;
+      p.inv = 0.8;
+      sfx('roll');
+      floatAt(p.x, p.y - 40, 'Blocked!', 'hint', 800);
+      this.renderHud();
+      return;
+    }
     this.hp--;
     p.inv = 1;
     const d = Math.hypot(p.x - fromX, p.y - fromY) || 1;
@@ -526,7 +575,7 @@ export class DungeonScene extends Phaser.Scene {
     const shot = takeShot();
     if (!shot || this.bowCd > 0 || p.roll > 0) return;
     const d = shot.x || shot.y ? shot : nearest();
-    this.bowCd = 0.65;
+    this.bowCd = bowReload();
     p.fx = d.x;
     p.fy = d.y;
     sfx('swing');
@@ -540,7 +589,7 @@ export class DungeonScene extends Phaser.Scene {
       a.sp.setPosition(a.x, a.y);
       const m = Math.hypot(a.vx, a.vy);
       const target = this.enemies.find((e) => Math.hypot(e.x - a.x, e.y - 6 - a.y) < e.r + 6);
-      if (target) this.hitEnemy(target, 2 + (S.upgrades.wrench ? 1 : 0), a.vx / m, a.vy / m, false);
+      if (target) this.hitEnemy(target, bowDamage(), a.vx / m, a.vy / m, false);
       if (target || this.inBlock(a.x, a.y) || a.x < B.x0 - 12 || a.x > B.x1 + 12 || a.y < B.y0 - 30 || a.y > B.y1 + 12) {
         a.sp.destroy();
         this.arrows.splice(this.arrows.indexOf(a), 1);
@@ -554,7 +603,7 @@ export class DungeonScene extends Phaser.Scene {
       const d = Math.hypot(k.x - this.p.x, k.y - this.p.y);
       if (d > 38) k.asked = false;
       if (!k.ready || d > 20) continue;
-      if (this.bag.length < RULES.bagSlots) {
+      if (this.bag.length < this.capacity()) {
         this.bag.push(k.id);
         this.takePickup(k);
         sfx('coin');
@@ -599,6 +648,68 @@ export class DungeonScene extends Phaser.Scene {
       btn(`Leave the ${ITEMS[k.id].name}`, close)));
   }
 
+  // ---- the companion ----
+
+  private updPet(dt: number) {
+    const pet = this.pet;
+    if (!pet) return;
+    const p = this.p;
+    if (this.petState === 'away') {
+      this.petAway -= dt;
+      if (this.petAway <= 0) {
+        this.petState = 'follow';
+        pet.x = 180;
+        pet.y = 96;
+        pet.setVisible(true);
+        floatAt(180, 120, `${S.pet!.name} is back!`, 'hint', 1400);
+        this.renderHud();
+      }
+      return;
+    }
+    this.petCd -= dt;
+    if (this.petState === 'attack') {
+      const t = this.petTarget;
+      if (!t || !this.enemies.includes(t)) {
+        this.petState = 'follow';
+      } else if (pet.moveTo(dt, t.x, t.y + 4, 300, t.r + 6)) {
+        const d = Math.hypot(t.x - pet.x, t.y - pet.y) || 1;
+        this.hitEnemy(t, petDamage(), (t.x - pet.x) / d, (t.y - pet.y) / d, false);
+        this.petCd = petAttackGap();
+        this.petState = 'follow';
+      }
+      return;
+    }
+    pet.follow(dt, p.x, p.y, p.fx, p.fy);
+    if (this.petCd <= 0) {
+      // go for whatever is closest to the shopkeeper
+      let best: Enemy | null = null;
+      let bd = 150;
+      for (const e of this.enemies) {
+        const d = Math.hypot(e.x - p.x, e.y - p.y);
+        if (d < bd) { bd = d; best = e; }
+      }
+      if (best) {
+        this.petTarget = best;
+        this.petState = 'attack';
+      }
+    }
+  }
+
+  /** Homing run: the pet carries the bag back to the store. That loot is safe from here on. */
+  private sendHome() {
+    if (!this.pet || this.petState === 'away' || !this.bag.length || this.ended) return;
+    const n = this.bag.length;
+    this.banked.push(...this.bag);
+    this.bag = [];
+    this.petState = 'away';
+    this.petAway = 14;
+    this.pet.setVisible(false);
+    sfx('deal');
+    floatAt(this.pet.x, this.pet.y - 30, `${S.pet!.name} ran ${n} home!`, 'gain', 1400);
+    log('pet_courier', { items: n });
+    this.renderHud();
+  }
+
   // ---- end of run ----
 
   private endRun(defeated: boolean, complete = false) {
@@ -612,6 +723,6 @@ export class DungeonScene extends Phaser.Scene {
       while (this.bag.length > keep) lost.push(...this.bag.splice(Math.floor(Math.random() * this.bag.length), 1));
     }
     log('run_end', { rooms: this.cleared, defeated, bag: this.bag, hearts: this.hp });
-    this.time.delayedCall(defeated ? 700 : 150, () => hooks.runEnded({ bag: this.bag, lost, rooms: this.cleared, total: this.plan.length, defeated, complete, daily: this.daily }));
+    this.time.delayedCall(defeated ? 700 : 150, () => hooks.runEnded({ bag: this.bag, banked: this.banked, lost, rooms: this.cleared, total: this.plan.length, defeated, complete, daily: this.daily }));
   }
 }

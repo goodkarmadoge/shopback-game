@@ -5,6 +5,7 @@ import { axis, buildControls, resetInput } from '../input';
 import { BRAND } from '../panels';
 import { music, sfx } from '../audio';
 import { CITY_H } from '../scenery';
+import { Pet } from '../pet';
 
 /** Local businesses the shopkeeper can partner with. Names are invented. */
 export const PARTNERS = [
@@ -41,6 +42,7 @@ export class CityScene extends Phaser.Scene {
   private promptEl!: HTMLElement;
   private labels: { el: HTMLElement; x: number; y: number }[] = [];
   private busy = false;
+  private pet: Pet | null = null;
 
   constructor() {
     super('city');
@@ -133,6 +135,7 @@ export class CityScene extends Phaser.Scene {
 
     this.shadow = this.add.image(0, 0, 'shadow').setScale(0.5);
     this.hero = this.add.sprite(0, 0, `av_${S.avatar}`, 0).setScale(0.6);
+    this.pet = Pet.maybe(this, this.p.x - 22, this.p.y + 6);
 
     const cam = this.cameras.main;
     cam.setZoom(2);
@@ -186,6 +189,7 @@ export class CityScene extends Phaser.Scene {
     const dir = (Math.round(Math.atan2(-p.fx, p.fy) / (Math.PI / 4)) + 8) % 8;
     this.hero.setFrame(dir * 6 + (moving ? Math.floor(this.time.now / 90) % 6 : 0)).setPosition(p.x, p.y - 20).setDepth(p.y);
     this.shadow.setPosition(p.x, p.y + 5).setDepth(p.y - 1);
+    this.pet?.follow(dt, p.x, p.y, p.fx, p.fy);
 
     const near = this.spots.find((s) => Math.hypot(s.x - p.x, s.y - p.y) < s.r) ?? null;
     if (near !== this.near) {

@@ -19,7 +19,9 @@ export interface State {
   stock: ItemId[];
   prices: Record<ItemId, number>;
   notebook: Record<ItemId, Note>;
-  upgrades: { shelf: boolean; sign: boolean; wrench: boolean };
+  /** Upgrade tree: node id -> level owned. See upgrades.ts. */
+  up: Record<string, number>;
+  pet: { kind: 'cat' | 'dog'; name: string } | null;
   interests: string[];
   shopList: string[];
   muted: boolean;
@@ -30,7 +32,7 @@ export interface State {
   unlocks: { auto: boolean; bow: boolean };
 }
 
-const SAVE_KEY = 'shopkeeper-save-v2';
+const SAVE_KEY = 'shopkeeper-save-v3';
 const LOG_KEY = 'shopkeeper-log-v1';
 
 const byItem = <T>(f: (id: ItemId) => T) => Object.fromEntries(ITEM_IDS.map((id) => [id, f(id)])) as Record<ItemId, T>;
@@ -45,7 +47,8 @@ export function fresh(): State {
     stock: ['gear', 'gear', 'cell'],
     prices: byItem(defaultPrice),
     notebook: byItem(() => ({})),
-    upgrades: { shelf: false, sign: false, wrench: false },
+    up: {},
+    pet: null,
     interests: [],
     shopList: [],
     muted: false,
@@ -121,12 +124,16 @@ export interface DaySummary {
   cashback: number;
   sales: number;
   campaignUsed: boolean;
+  /** Sales made before opening, through pre-orders. */
+  preorders: { item: ItemId; price: number }[];
   customers: number;
   startStock: ItemId[];
 }
 export interface RunSummary {
   bag: ItemId[];
   lost: ItemId[];
+  /** Loot the pet already ran home: safe even on defeat. */
+  banked: ItemId[];
   rooms: number;
   total: number;
   defeated: boolean;
