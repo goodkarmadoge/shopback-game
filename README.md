@@ -4,6 +4,10 @@ A single-player shopkeeper game prototype for the ShopBack app. Sell loot in you
 
 Built with Phaser 3, TypeScript and Vite. It is a static site with no backend.
 
+## Entry point
+
+The app opens on a mock-up of the ShopBack home screen (`src/home.ts`). Its ShopKeeper card's **Play now** button launches the game; **‹ ShopBack** on the game's welcome screen goes back. Add `?game` to the URL to skip straight to the game.
+
 ## Run it
 
 ```bash

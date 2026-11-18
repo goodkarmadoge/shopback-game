@@ -7,6 +7,7 @@ import { DaySummary, RunSummary, S, getLog, hasSave, hooks, log, resetState, sav
 import { btn, card, confetti, countUp, h, hero, icon, setHud, setModal, stars, toast } from './ui';
 import { artUrl } from './art';
 import { preloadSprites, registerSprites } from './sprites';
+import { showHome } from './home';
 import { BRAND, pricingPanel } from './panels';
 import { music, setMuted, sfx } from './audio';
 import { buildScenery } from './scenery';
@@ -43,7 +44,9 @@ class BootScene extends Phaser.Scene {
     // painted backdrops and 3D-rendered sprites are high resolution: smooth them, keep pixel art crisp
     const smooth = ['pillar', 'deco_wood', 'deco_carpet', 'deco_curtains', 'deco_lights', 'pet_cat', 'pet_dog', 'shop_bg', 'city_bg', 'dungeon_bg_0', 'dungeon_bg_1', 'dungeon_bg_2', 'table', 'shadow', 'av_male', 'av_female', ...CITY_SPRITES.map((k) => `city_${k}`)];
     for (const k of smooth) this.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
-    title();
+    // the game is entered from the app's home screen; ?game skips straight to it
+    if (new URLSearchParams(location.search).has('game')) title();
+    else appHome();
   }
 }
 
@@ -123,6 +126,16 @@ function stopShowcase() {
   showcase = undefined;
 }
 
+/** The mocked-up app home screen. Its ShopKeeper card launches the game. */
+function appHome() {
+  stopShowcase();
+  music(null);
+  setHud(null);
+  setModal(null);
+  go('city', { idle: true });
+  showHome(() => { log('launch_from_app'); title(); });
+}
+
 function title() {
   setHud(null);
   music('shop');
@@ -134,7 +147,10 @@ function title() {
     where = where === 'city' ? 'shop' : 'city';
     go(where, { idle: true });
   }, 7000);
+  const back = h('button', { class: 'backhome', type: 'button' }, '‹ ShopBack');
+  back.addEventListener('click', () => { sfx('tap'); appHome(); });
   setModal(h('div', { class: 'title' },
+    back,
     h('div', { class: 'tgroup top' },
       h('div', { class: 'logo' }, h('span', {}, 'Shop'), h('span', { class: 'k' }, 'Keeper')),
       h('p', { class: 'tagline' }, 'Entrepreneur by Day.', h('br', {}), 'Adventurer by Night.', h('br', {}), h('b', {}, 'You are the Shop Keeper!'))),
