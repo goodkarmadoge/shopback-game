@@ -8,7 +8,8 @@ export interface Note {
   tooHigh?: number; // lowest price that annoyed a customer
 }
 
-export type Phase = 'new' | 'tutorial' | 'dungeon' | 'morning' | 'upgrade' | 'done';
+/** tutorial and morning lead into the open shop; dungeon is the evening out; idle is the night at home. */
+export type Phase = 'new' | 'tutorial' | 'dungeon' | 'morning' | 'idle';
 
 export interface State {
   phase: Phase;
@@ -32,9 +33,13 @@ export interface State {
   /** Introduction levels cleared, 0 to 5. After 5 the Daily Dungeon opens. */
   dungeonLevel: number;
   unlocks: { auto: boolean; bow: boolean };
+  /** A fed pet hits harder on the next dungeon run. */
+  petFed: boolean;
+  /** Tonight's personal offer has been looked at. */
+  offerSeen: boolean;
 }
 
-const SAVE_KEY = 'shopkeeper-save-v3';
+const SAVE_KEY = 'shopkeeper-save-v4';
 const LOG_KEY = 'shopkeeper-log-v1';
 
 const byItem = <T>(f: (id: ItemId) => T) => Object.fromEntries(ITEM_IDS.map((id) => [id, f(id)])) as Record<ItemId, T>;
@@ -59,6 +64,8 @@ export function fresh(): State {
     partners: [],
     dungeonLevel: 0,
     unlocks: { auto: false, bow: false },
+    petFed: false,
+    offerSeen: false,
   };
 }
 
@@ -152,4 +159,8 @@ export const hooks = {
   runEnded: (_: RunSummary) => {},
   hud: () => {},
   cityExit: () => {},
+  /** Walking back into the shop from the street at night. */
+  cityHome: () => {},
+  /** Things the player does at home after hours. */
+  home: (_: 'sleep' | 'offers' | 'upgrades' | 'door') => {},
 };

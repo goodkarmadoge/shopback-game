@@ -11,6 +11,7 @@ import lines from '../lines.json';
 import { PARTNER_BONUS } from './CityScene';
 import { Pet } from '../pet';
 import { charm, lvl, preorders, shelfCount, vipCount, walkInCount } from '../upgrades';
+import { PET_INFO } from '../pet';
 import { promoBonus, promoFor } from '../promos';
 import { COIN_SCALE, ITEM_SCALE, facePerson, person } from '../sprites';
 
@@ -83,6 +84,14 @@ export class ShopScene extends Phaser.Scene {
   private happy = 0;
   private regularsToday = 0;
   private shopDay = 1;
+  /** After hours: no customers, the shopkeeper is at home. */
+  private home = false;
+  private solids: { x: number; y: number; w: number; h: number }[] = [];
+  private spots: { x: number; y: number; r: number; label: () => string; act: () => void }[] = [];
+  private nearSpot: ShopScene['spots'][number] | null = null;
+  private closeAt = 0;
+  private dayLen = 1;
+  private clockEl: HTMLElement | null = null;
   private hg: { sheet: HTMLElement; say: HTMLElement; hearts: HTMLElement; num: HTMLElement; word: HTMLElement; slider: HTMLInputElement; go: HTMLButtonElement; low: HTMLElement; mine: HTMLElement } | null = null;
   private promptEl: HTMLElement | null = null;
   private near: Slot | null = null;
@@ -92,7 +101,12 @@ export class ShopScene extends Phaser.Scene {
     super('shop');
   }
 
-  init(data: { tutorial?: boolean; idle?: boolean }) {
+  init(data: { tutorial?: boolean; idle?: boolean; home?: boolean }) {
+    this.home = !!data.home;
+    this.solids = [];
+    this.spots = [];
+    this.nearSpot = null;
+    this.clockEl = null;
     this.tutorial = !!data.tutorial;
     this.idle = !!data.idle;
     this.slots = [];
@@ -119,7 +133,7 @@ export class ShopScene extends Phaser.Scene {
     });
     this.preorderSales = [];
     this.happy = 0;
-    this.shopDay = this.tutorial ? 1 : S.day + 1;
+    this.shopDay = S.day;
     this.heroShadow = this.add.image(0, 0, 'shadow').setScale(0.5);
     this.hero = this.add.sprite(180, 84, `av_${S.avatar}`, 0).setScale(0.6);
     this.placeHero(false);
@@ -153,7 +167,7 @@ export class ShopScene extends Phaser.Scene {
     this.startStock = [...S.stock];
     this.back = [...S.stock];
     // pre-orders are collected before the doors open, at 120% of value
-    for (let i = 0; i < preorders() && !this.tutorial && this.back.length > 1; i++) {
+    for (let i = 0; i < preorders() && !this.tutorial && !this.home && this.back.length > 1; i++) {
       const item = this.back.splice(Math.floor(Math.random() * this.back.length), 1)[0];
       const price = Math.round(ITEMS[item].value * 1.2);
       S.stock.splice(S.stock.indexOf(item), 1);
@@ -180,6 +194,8 @@ export class ShopScene extends Phaser.Scene {
       this.tweens.add({ targets: s.icon, y: s.y - 14.5, duration: rnd(800, 1100), yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     }
 
+    this.furnish();
+    if (this.home) return this.atHome();
     // day status, coach line and the campaign button live at the top of the screen
     this.statusEl = h('div', { class: 'daystrip' });
     this.coachEl = h('div', { class: 'coachtop' });
@@ -207,6 +223,7 @@ export class ShopScene extends Phaser.Scene {
 
   update(_: number, dms: number) {
     const dt = Math.min(dms, 50) / 1000;
+    this.tick();
     if (!this.idle && !this.over) this.moveHero(dt);
     if (!this.idle) this.pet?.follow(dt, this.p.x, this.p.y, this.p.fx, this.p.fy);
     for (const cu of this.custs) {
@@ -228,6 +245,7 @@ export class ShopScene extends Phaser.Scene {
 
   private blocked(x: number, y: number) {
     if (x > COUNTER.x - 8 && x < COUNTER.x + COUNTER.w + 8 && y > COUNTER.y && y < COUNTER.y + COUNTER.h + 6) return true;
+    if (this.solids.some((o) => x > o.x - 6 && x < o.x + o.w + 6 && y > o.y - 4 && y < o.y + o.h + 4)) return true;
     return this.slots.some((s) => Math.abs(x - s.x) < 30 && y > s.y - 12 && y < s.y + 22);
   }
 
@@ -258,7 +276,14 @@ export class ShopScene extends Phaser.Scene {
       this.near = near;
       this.paintPrompt();
     }
-    if (tapped && near && !this.cur && !this.picking) this.openPicker(near);
+    // at home, furniture you can use takes priority over the display beside it
+    const spot = this.spots.find((o) => Math.hypot(p.x - o.x, p.y - o.y) < o.r) ?? null;
+    if (spot !== this.nearSpot) {
+      this.nearSpot = spot;
+      this.paintPrompt();
+    }
+    if (tapped && spot) spot.act();
+    else if (tapped && near && !this.cur && !this.picking) this.openPicker(near);
   }
 
   private promptKey(s: Slot | null) {
@@ -271,6 +296,11 @@ export class ShopScene extends Phaser.Scene {
     const s = this.near;
     el.dataset.k = this.promptKey(s);
     el.replaceChildren();
+    const spot = this.nearSpot;
+    if (spot) {
+      el.append(btn(spot.label(), () => { sfx('tap'); spot.act(); }, 'primary'));
+      return;
+    }
     if (!s || (!s.item && !this.back.length)) return;
     el.append(btn(s.item ? [icon(`item_${s.item}`, 'ico s'), ' Change display'] : '+ Stock this display', () => this.openPicker(s), 'primary'));
   }
@@ -328,6 +358,91 @@ export class ShopScene extends Phaser.Scene {
     const dir = (Math.round(Math.atan2(-p.fx, p.fy) / (Math.PI / 4)) + 8) % 8;
     this.hero.setFrame(dir * 6 + (moving ? Math.floor(this.time.now / 90) % 6 : 0)).setPosition(p.x, p.y - 20).setDepth(p.y);
     this.heroShadow.setPosition(p.x, p.y + 5).setDepth(p.y - 1);
+  }
+
+  // ---- the business day clock ----
+
+  /** Customers arrive on a fixed beat, so the time left follows from how many are still to come. */
+  private retime(reset = false) {
+    const gap = this.campaign ? 1.5 : 3.8;
+    const left = this.tutorial ? 0 : this.queue.length * gap + 6;
+    this.closeAt = this.time.now + left * 1000;
+    if (reset) this.dayLen = Math.max(1, left);
+  }
+
+  private tick() {
+    if (!this.clockEl || this.over || this.tutorial) return;
+    const left = Math.max(0, (this.closeAt - this.time.now) / 1000);
+    const text = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
+    if (this.clockEl.textContent !== text) this.clockEl.textContent = text;
+    const bar = this.statusEl.querySelector<HTMLElement>('.daybar > i');
+    if (bar) bar.style.width = `${Math.min(100, (left / this.dayLen) * 100)}%`;
+    this.statusEl.classList.toggle('closing', left < 10);
+  }
+
+  // ---- furniture and the after-hours shop ----
+
+  private furnish() {
+    const put = (key: string, x: number, baseY: number, scale: number, solid?: [number, number], depth?: number) => {
+      this.add.image(x, baseY, `room_${key}`).setOrigin(0.5, 1).setScale(scale).setDepth(depth ?? baseY);
+      if (solid) this.solids.push({ x: x - solid[0] / 2, y: baseY - solid[1], w: solid[0], h: solid[1] });
+    };
+    if (lvl('posters')) put('posters', 54, 92, 0.36, undefined, -9.4);
+    if (lvl('rug')) put('rug', 180, 226, 0.42, undefined, -9.3);
+    put(lvl('bed') ? 'bed' : 'futon', 50, 234, 0.42, [38, 58]);
+    put('bench', 308, 152, 0.3, [40, 30]);
+    put('couch', 304, 228, 0.34, [52, 26]);
+    if (lvl('lamp')) put('lamp', 344, 182, 0.42);
+    if (lvl('armchair')) put('armchair', 36, 322, 0.34, [28, 22]);
+    if (S.pet) put('bowl', 104, 228, 0.3);
+  }
+
+  /** Night in the shop: nothing to sell, plenty to potter about with. */
+  private atHome() {
+    const night = this.add.rectangle(180, 320, 360, 640, 0x0b1040, 0.52).setDepth(880);
+    void night;
+    for (const [x, y, sc, tint] of [[180, 96, 2.6, 0xffc46b], [304, 150, 1.4, 0xffd9a0], [344, 130, 1.6, 0xffd27a], [50, 190, 1.2, 0xffe6c0]] as const) {
+      this.add.image(x, y, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(tint).setAlpha(0.55).setScale(sc).setDepth(881);
+    }
+    this.statusEl = h('div', {});
+    this.coachEl = h('div', { class: 'coachtop' });
+    floatLayer.append(this.coachEl);
+    this.dom.push(this.coachEl);
+    this.coach('Closed for the night. Potter about, then head to bed.');
+    const pet = S.pet;
+    this.spots.push(
+      { x: 50, y: 240, r: 30, label: () => '💤 Go to sleep', act: () => hooks.home('sleep') },
+      { x: 304, y: 236, r: 30, label: () => '🛋️ Rest on the couch', act: () => this.rest() },
+      { x: 306, y: 166, r: 28, label: () => '⬆ Upgrades', act: () => hooks.home('upgrades') },
+      { x: 180, y: 104, r: 26, label: () => (S.offerSeen ? '🎁 Personal Offers' : '🎁 Personal Offers · new'), act: () => hooks.home('offers') },
+      { x: 180, y: 488, r: 24, label: () => '🚪 Step outside', act: () => hooks.home('door') },
+    );
+    if (pet) this.spots.push({ x: 104, y: 232, r: 20, label: () => (S.petFed ? `${pet.name} is full` : `🍖 Feed ${pet.name} · 5 coins`), act: () => this.feed() });
+    this.p = { x: 180, y: 190, fx: 0, fy: 1 };
+    this.showControls();
+  }
+
+  private rest() {
+    this.p.x = 304;
+    this.p.y = 234;
+    this.p.fx = 0;
+    this.p.fy = 1;
+    floatAt(304, 190, '♪', 'gain', 1200);
+    this.coach(pickOne(['Feet up. The till is counted and the street is quiet.', 'A good day’s trade. The couch has earned its keep.', 'You could get used to this.']));
+  }
+
+  private feed() {
+    const pet = S.pet;
+    if (!pet || S.petFed) return;
+    if (S.coins < 5) return toast('Not enough coins for pet food.');
+    S.coins -= 5;
+    S.petFed = true;
+    save();
+    hooks.hud();
+    sfx('coin');
+    floatAt(104, 200, '💖', 'sparkle', 1100);
+    this.coach(`${pet.name} the ${PET_INFO[pet.kind].label} tucks in. +1 damage on tomorrow’s dungeon run.`);
+    this.nearSpot = null;
   }
 
   // ---- helpers ----
@@ -403,6 +518,7 @@ export class ShopScene extends Phaser.Scene {
       this.queue.splice(1 + Math.floor(Math.random() * this.queue.length), 0, { type: 'collector', wants: best, vip: true });
     }
     this.total = this.queue.length;
+    this.retime(true);
     this.refresh();
     await this.wait(1200);
 
@@ -646,6 +762,7 @@ export class ShopScene extends Phaser.Scene {
     const extra = this.queue.length * (RULES.campaignMult - 1) + S.partners.length * PARTNER_BONUS;
     for (let i = 0; i < extra; i++) this.queue.push(makeCustomer(Math.random, this.pool()));
     this.total += extra;
+    this.retime(true);
     sfx('campaign');
     log('campaign_start', { arrived: this.arrived, extra });
     this.coach(`Here they come! +${extra} customers, drawn in by Cashback. They leave happier, and some come back tomorrow.`);
@@ -658,9 +775,12 @@ export class ShopScene extends Phaser.Scene {
 
   /** Cheap to call: only touches the top strip and the campaign button, never the barter panel. */
   private refresh() {
-    if (this.over || this.idle) return;
+    if (this.over || this.idle || this.home) return;
+    const left = this.queue.length;
+    this.clockEl = h('b', {}, '');
     this.statusEl.replaceChildren(
-      h('span', {}, h('small', {}, 'Customers'), h('b', {}, `${this.arrived}/${this.total}`)),
+      this.tutorial ? '' : h('span', { class: 'clock' }, h('small', {}, 'Closes in'), this.clockEl, h('i', { class: 'daybar' }, h('i', {}))),
+      h('span', {}, h('small', {}, 'Customers'), h('b', {}, `${this.arrived}/${this.total}`), h('small', { class: 'more' }, left ? `${left} to come` : 'last ones in')),
       h('span', {}, h('small', {}, 'Stock'), h('b', {}, S.stock.length)),
       btn('Prices', () => this.openPrices(), 'small'),
     );

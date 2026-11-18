@@ -2,11 +2,11 @@ import Phaser from 'phaser';
 import { ITEMS, ItemId, RULES } from '../econ';
 import { S, hooks, log, save } from '../state';
 import { btn, card, floatAt, floatLayer, h, icon, place, setHud, setModal, setSheet } from '../ui';
-import { aiming, axis, buildControls, consume, press, resetInput, takeShot } from '../input';
+import { axis, buildControls, consume, press, resetInput, shoot, takeShot } from '../input';
 import { Block, INTRO, Kind, RoomDef, dailyDungeon } from '../levels';
 import { Pet } from '../pet';
 import { CHEST_SCALE, ITEM_SCALE, MOB } from '../sprites';
-import { bagSlots, bowDamage, bowReload, hasCourier, maxHearts, meleeBonus, petAttackGap, petBagSlots, petDamage, regenHearts, rollCooldown, shieldHits } from '../upgrades';
+import { aimTime, bagSlots, bowDamage, bowReload, hasCourier, maxHearts, meleeBonus, petAttackGap, petBagSlots, petDamage, regenHearts, rollCooldown, shieldHits } from '../upgrades';
 import { music, sfx } from '../audio';
 
 
@@ -78,6 +78,8 @@ export class DungeonScene extends Phaser.Scene {
   private p = { x: 180, y: 520, fx: 0, fy: -1, atk: 0, combo: 0, comboT: 0, roll: 0, rollCd: 0, inv: 0, rdx: 0, rdy: 0, kx: 0, ky: 0 };
   private enemies: Enemy[] = [];
   private freeze = 0;
+  /** Drawing the bow: a drag anywhere on the play field. `t` is how long it has been held. */
+  private aim = { down: false, on: false, sx: 0, sy: 0, x: 0, y: 0, pull: 0, t: 0 };
   private pickups: Pickup[] = [];
   private bullets: Bullet[] = [];
   private chest: { sp: Phaser.GameObjects.Image; open: boolean } | null = null;
@@ -131,7 +133,34 @@ export class DungeonScene extends Phaser.Scene {
     this.add.image(0, 0, 'vignette').setOrigin(0).setScale(2).setDepth(1500);
     this.shadow = this.add.image(0, 0, 'shadow').setScale(0.5);
     this.hero = this.add.sprite(180, 520, `av_${S.avatar}`, 0).setScale(0.6);
-    this.input.on('pointerdown', () => press('attack'));
+    // a tap on the play field attacks; with the bow, pulling back and letting go fires
+    this.aim = { down: false, on: false, sx: 0, sy: 0, x: 0, y: 0, pull: 0, t: 0 };
+    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      Object.assign(this.aim, { down: true, on: false, sx: ptr.x, sy: ptr.y, x: 0, y: 0, pull: 0, t: 0 });
+    });
+    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
+      const a = this.aim;
+      if (!a.down || !S.unlocks.bow) return;
+      const dx = ptr.x - a.sx;
+      const dy = ptr.y - a.sy;
+      const m = Math.hypot(dx, dy);
+      if (m < 24) return;
+      // the arrow flies the opposite way to the pull
+      a.on = true;
+      a.x = -dx / m;
+      a.y = -dy / m;
+      a.pull = Math.min(1, m / 160);
+    });
+    const release = () => {
+      const a = this.aim;
+      if (!a.down) return;
+      a.down = false;
+      if (a.on) shoot(a.x, a.y);
+      else press('attack');
+      a.on = false;
+    };
+    this.input.on('pointerup', release);
+    this.input.on('pointerupoutside', release);
     setSheet(buildControls(S.unlocks.bow));
     this.pet = Pet.maybe(this, 160, 540);
     if (hasCourier()) {
@@ -249,7 +278,7 @@ export class DungeonScene extends Phaser.Scene {
     for (let i = 0; i < cap; i++) bag.append(h('span', { class: `slot ${i >= own ? 'petslot' : ''}` }, this.bag[i] ? icon(`item_${this.bag[i]}`, 'ico s') : null));
     const boss = this.enemies.find((e) => e.kind === 'guardian');
     setHud(h('div', { class: 'dhud' },
-      h('div', { class: 'drow' }, hearts, h('span', { class: 'roomno' }, `${this.levelName} · ${this.room + 1}/${this.plan.length}`)),
+      h('div', { class: 'drow' }, hearts, h('span', { class: 'roomno' }, h('b', {}, this.levelName), h('span', { class: 'rooms', 'aria-label': `Room ${this.room + 1} of ${this.plan.length}` }, ...this.plan.map((_, i) => h('i', { class: i < this.room ? 'done' : i === this.room ? 'on' : '' }))), h('small', {}, `Room ${this.room + 1}/${this.plan.length}`))),
       h('div', { class: 'drow bagrow' }, h('small', {}, `Bag ${this.bag.length}/${cap}${this.banked.length ? ` · ${this.banked.length} safe` : ''}`), bag),
       boss ? h('div', { class: 'boss' }, h('small', {}, `Vault Guardian · ${boss.hp} of ${this.bossMax}`), h('div', { class: 'bar' }, h('i', { style: `width:${(boss.hp / this.bossMax) * 100}%` }))) : null,
     ));
@@ -262,7 +291,13 @@ export class DungeonScene extends Phaser.Scene {
     if (this.paused || this.ended) return;
     // hit-stop: a few frozen frames sell the weight of a blow
     if (this.freeze > 0) { this.freeze -= dms / 1000; return; }
-    const dt = Math.min(dms, 50) / 1000;
+    let dt = Math.min(dms, 50) / 1000;
+    // holding the bow drawn slows the world by a quarter, for as long as the aim can be held
+    if (this.aim.on) {
+      this.aim.t += dt;
+      if (this.aim.t >= aimTime()) { shoot(this.aim.x, this.aim.y); this.aim.on = this.aim.down = false; }
+      dt *= 0.75;
+    }
     this.gfx.clear();
     this.updPlayer(dt);
     for (const e of [...this.enemies]) this.updEnemy(e, dt);
@@ -594,13 +629,12 @@ export class DungeonScene extends Phaser.Scene {
     }
   }
 
-  // ---- the bow: unlocked after Level 3. Drag to aim, release to fire. ----
+  // ---- the bow: unlocked after Level 3. Pull back anywhere on the field, let go to fire. ----
 
   private updBow(dt: number) {
     const p = this.p;
     this.bowCd -= dt;
     if (!S.unlocks.bow) return;
-    const aim = aiming();
     const nearest = () => {
       let best: Enemy | null = null;
       let bd = 1e9;
@@ -611,10 +645,19 @@ export class DungeonScene extends Phaser.Scene {
       if (!best) return { x: p.fx, y: p.fy };
       return { x: (best.x - p.x) / bd, y: (best.y - p.y) / bd };
     };
+    const aim = this.aim;
     if (aim.on) {
-      const d = aim.x || aim.y ? aim : nearest();
-      this.gfx.lineStyle(2, 0x35e0ff, 0.85).lineBetween(p.x, p.y - 8, p.x + d.x * 260, p.y - 8 + d.y * 260);
-      this.gfx.fillStyle(0x35e0ff, 0.9).fillCircle(p.x + d.x * 260, p.y - 8 + d.y * 260, 4);
+      p.fx = aim.x;
+      p.fy = aim.y;
+      const len = 150 + aim.pull * 130;
+      const left = 1 - aim.t / aimTime();
+      this.gfx.lineStyle(2, 0x35e0ff, 0.9).lineBetween(p.x, p.y - 8, p.x + aim.x * len, p.y - 8 + aim.y * len);
+      this.gfx.fillStyle(0x35e0ff, 0.95).fillCircle(p.x + aim.x * len, p.y - 8 + aim.y * len, 4);
+      // the bowstring, pulled back behind the hero
+      this.gfx.lineStyle(2, 0xeaffff, 0.8).lineBetween(p.x, p.y - 8, p.x - aim.x * (10 + aim.pull * 26), p.y - 8 - aim.y * (10 + aim.pull * 26));
+      // a ring that drains as the aim runs out
+      this.gfx.lineStyle(3, left < 0.3 ? 0xff5470 : 0xffe14d, 0.9).beginPath();
+      this.gfx.arc(p.x, p.y - 8, 20, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left, false).strokePath();
     }
     const shot = takeShot();
     if (!shot || this.bowCd > 0 || p.roll > 0) return;

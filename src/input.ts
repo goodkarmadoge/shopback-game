@@ -5,8 +5,6 @@ import { h } from './ui';
 const keys = new Set<string>();
 const stick = { x: 0, y: 0 };
 const pressed = { attack: false, dodge: false };
-// bow: drag from the button to aim, release to fire
-const bowAim = { on: false, x: 0, y: 0 };
 let bowShot: { x: number; y: number } | null = null;
 
 window.addEventListener('keydown', (e) => {
@@ -39,8 +37,8 @@ export function consume(k: 'attack' | 'dodge'): boolean {
   return v;
 }
 export const press = (k: 'attack' | 'dodge') => (pressed[k] = true);
-/** Where the bow is being aimed while the button is held; x and y are 0 until dragged. */
-export const aiming = () => bowAim;
+/** Queue a bow shot in a direction; a zero vector aims at the nearest enemy. */
+export const shoot = (x: number, y: number) => (bowShot = { x, y });
 /** A released shot. A zero vector means "no drag": aim at the nearest enemy. */
 export function takeShot() {
   const s = bowShot;
@@ -50,8 +48,6 @@ export function takeShot() {
 export const resetInput = () => {
   stick.x = stick.y = 0;
   pressed.attack = pressed.dodge = false;
-  bowAim.on = false;
-  bowAim.x = bowAim.y = 0;
   bowShot = null;
 };
 
@@ -85,21 +81,9 @@ export function buildControls(withBow = false): HTMLElement {
   };
   const acts = h('div', { class: 'acts' }, action('dodge', 'Dodge', 'K'), action('attack', 'Attack', 'J'));
   if (withBow) {
-    const bow = h('button', { class: 'act bow', type: 'button' }, h('b', {}, 'Bow'), h('small', {}, 'drag · L'));
-    let sx = 0;
-    let sy = 0;
-    const drag = (e: PointerEvent) => {
-      const dx = e.clientX - sx;
-      const dy = e.clientY - sy;
-      const m = Math.hypot(dx, dy);
-      bowAim.x = m > 14 ? dx / m : 0;
-      bowAim.y = m > 14 ? dy / m : 0;
-    };
-    bow.addEventListener('pointerdown', (e) => { e.preventDefault(); bow.setPointerCapture(e.pointerId); sx = e.clientX; sy = e.clientY; bowAim.on = true; bowAim.x = bowAim.y = 0; });
-    bow.addEventListener('pointermove', (e) => { if (bowAim.on) drag(e); });
-    const release = () => { if (!bowAim.on) return; bowShot = { x: bowAim.x, y: bowAim.y }; bowAim.on = false; };
-    bow.addEventListener('pointerup', release);
-    bow.addEventListener('pointercancel', () => { bowAim.on = false; });
+    // a tap fires at the nearest enemy; dragging on the play field aims by hand
+    const bow = h('button', { class: 'act bow', type: 'button' }, h('b', {}, 'Bow'), h('small', {}, 'tap · L'));
+    bow.addEventListener('pointerdown', (e) => { e.preventDefault(); bowShot = { x: 0, y: 0 }; });
     acts.prepend(bow);
   }
   return h('div', { class: 'controls' }, base, acts);

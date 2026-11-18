@@ -4,6 +4,14 @@ A single-player shopkeeper game prototype for the ShopBack app. Sell loot in you
 
 Built with Phaser 3, TypeScript and Vite. It is a static site with no backend.
 
+## The three states of a day
+
+1. **Store Open (day).** Set prices, tap **Open Shop!** (the door sign flips to OPEN) and trade. A clock shows how long until closing and how many customers are still to come.
+2. **Dungeon Exploration (evening).** Leave the shop at dusk, walk to the Techno Dungeon and fight through its rooms. The HUD shows a pip for each room. Pull back anywhere on the field to aim the bow: time slows by a quarter and the aim can be held for 2 seconds (upgradable). A placeholder 16:9 ad slot shows on the way back to the surface.
+3. **Idle Time & Store Management (night).** The shop is closed and yours: rearrange displays, check Personal Offers at the counter, feed your pet, buy upgrades at the workbench, rest on the couch, or sleep to start the next day. Step outside and the other shops are shut and the dungeon gate is locked until tomorrow.
+
+The Room branch of the upgrade tree adds furniture: a proper bed, rug, armchair, posters and a floor lamp.
+
 ## Entry point
 
 The app opens on a mock-up of the ShopBack home screen (`src/home.ts`). Its ShopKeeper card's **Play now** button launches the game; **‹ ShopBack** on the game's welcome screen goes back. Add `?game` to the URL to skip straight to the game.

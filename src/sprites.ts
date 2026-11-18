@@ -15,6 +15,9 @@ export const MOB = {
   guardian: { cell: 192, scale: 0.37 },
 } as const;
 
+/** Furniture for the shopkeeper's own corner of the shop, and the dungeon's night gate. */
+export const ROOM = ['room_futon', 'room_bed', 'room_couch', 'room_armchair', 'room_rug', 'room_posters', 'room_lamp', 'room_bowl', 'room_bench', 'gate_locked'];
+
 /** Loot on a display table; pickups in the dungeon are a little smaller. */
 export const ITEM_SCALE = 0.3;
 export const COIN_SCALE = 0.36;
@@ -26,13 +29,14 @@ export function preloadSprites(scene: Phaser.Scene) {
   for (const [k, m] of Object.entries(MOB)) scene.load.spritesheet(k, `sprites/${k}.png`, { frameWidth: m.cell, frameHeight: m.cell });
   for (const id of ITEM_KEYS) scene.load.image(`item_${id}`, `sprites/item_${id}.png`);
   for (const k of ['chest_0', 'chest_1', 'coin', 'cbcoin', 'table']) scene.load.image(k === 'table' ? 'table_hd' : k, `sprites/${k}.png`);
+  for (const k of ROOM) scene.load.image(k, `sprites/${k}.png`);
 }
 
 const heart = (fill: string, hi: string) =>
   `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 30"><path d="M16 28C5 20 1 14.5 1 9.3 1 4.6 4.6 1.5 8.7 1.5c2.9 0 5.6 1.5 7.3 4 1.7-2.5 4.4-4 7.3-4C27.4 1.5 31 4.6 31 9.3 31 14.5 27 20 16 28z" fill="${fill}" stroke="#2b1b2e" stroke-width="2" stroke-linejoin="round"/><path d="M7 8.5c.4-2 2-3.200 3.8-3.2" fill="none" stroke="${hi}" stroke-width="2.4" stroke-linecap="round"/></svg>`)}`;
 
 export function registerSprites(scene: Phaser.Scene) {
-  const smooth: string[] = [...PEOPLE, ...Object.keys(MOB), ...ITEM_KEYS.map((i) => `item_${i}`), 'chest_0', 'chest_1', 'coin', 'cbcoin', 'table_hd', 'spark', 'bullet', 'glow', 'vignette', 'slash'];
+  const smooth: string[] = [...PEOPLE, ...Object.keys(MOB), ...ITEM_KEYS.map((i) => `item_${i}`), 'chest_0', 'chest_1', 'coin', 'cbcoin', 'table_hd', 'spark', 'bullet', 'glow', 'vignette', 'slash', ...ROOM];
   for (const k of smooth) scene.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
   for (const k of PEOPLE) {
     scene.anims.create({ key: k, frames: scene.anims.generateFrameNumbers(k, { frames: [0, 1] }), frameRate: 5, repeat: -1 });

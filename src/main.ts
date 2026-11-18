@@ -103,7 +103,7 @@ function hud(label = `Day ${S.day}`) {
       h('span', { class: 'bar' }, h('i', { style: `width:${pct}%` })),
       h('small', {}, S.level >= 2 ? `${S.xp} XP` : `${shownXp}/${RULES.xpLevel2} XP`)),
     h('span', { class: 'pill' }, label),
-    label.startsWith('Evening') ? btn(['⬆ Upgrades', anyAffordable() ? h('i', { class: 'dot' }) : null], () => { sfx('tap'); upgradeTree(() => { setModal(null); hooks.hud(); }); }, 'small upg') : null,
+    label.startsWith('Night') && S.phase === 'idle' ? btn(['⬆ Upgrades', anyAffordable() ? h('i', { class: 'dot' }) : null], () => { sfx('tap'); upgradeTree(() => { setModal(null); hooks.hud(); }); }, 'small upg') : null,
   ));
 }
 let hudLabel = '';
@@ -170,8 +170,7 @@ function resume() {
   if (S.phase === 'tutorial') tutorialIntro();
   else if (S.phase === 'dungeon') city();
   else if (S.phase === 'morning') morning();
-  else if (S.phase === 'upgrade') upgrade();
-  else if (S.phase === 'done') endCard();
+  else if (S.phase === 'idle') idleState();
   else interests();
 }
 
@@ -275,11 +274,10 @@ function tutorialIntro() {
   hud((hudLabel = 'Day 1 · Tutorial'));
   setModal(pricingPanel('Your first day',
     'You have 3 items and 2 customers on the way. Every item has a hidden market value. Set a price, then learn from how customers react.',
-    'Open the shop', () => {
-      setModal(null);
+    'Open Shop!', () => openSign(() => {
       log('day_start', { tutorial: true });
       go('shop', { tutorial: true });
-    }));
+    })));
 }
 
 hooks.dayEnded = (d: DaySummary) => (d.tutorial ? tutorialDone(d) : summary(d));
@@ -305,7 +303,7 @@ function city() {
   save();
   setModal(null);
   hud((hudLabel = `Evening ${S.day}`));
-  go('city');
+  go('city', { time: 'evening' });
 }
 hooks.cityExit = () => dungeonIntro();
 
@@ -319,8 +317,9 @@ function tomorrowHint(shopDay: number) {
 
 function dungeonIntro() {
   go('shop', { idle: true });
-  hud((hudLabel = `Night ${S.day}`));
+  hud((hudLabel = `Evening ${S.day}`));
   const daily = S.dungeonLevel >= INTRO.length;
+  const rooms = daily ? 4 : INTRO[S.dungeonLevel].rooms.length;
   const level = INTRO[Math.min(S.dungeonLevel, INTRO.length - 1)];
   const reward = !daily && level.unlock ? UNLOCK_INFO[level.unlock] : null;
   setModal(h('div', { class: 'card pop' },
@@ -330,11 +329,12 @@ function dungeonIntro() {
     daily
       ? h('div', { class: 'reward' }, h('span', {}, '💎'), h('div', {}, h('b', {}, 'Special loot'), h('small', {}, 'Gold Chips and Prism Shards sell for far more than anything else.')))
       : reward && h('div', { class: 'reward' }, h('span', {}, reward.emoji), h('div', {}, h('b', {}, `Clear it to unlock: ${reward.name}`), h('small', {}, reward.text))),
+    h('div', { class: 'sublevels' }, h('b', {}, `${rooms} room${rooms > 1 ? 's' : ''} deep`), h('span', { class: 'rooms' }, ...Array.from({ length: rooms }, () => h('i', {}))), h('small', {}, 'Leave with your loot after any room, or push on.')),
     h('div', { class: 'keys' },
       stat('Move', 'Stick · WASD'),
       stat('Attack', S.unlocks.auto ? 'Automatic · J' : 'Button · J'),
       stat('Dodge roll', 'Button · K'),
-      S.unlocks.bow ? stat('Bow', 'Drag to aim · L') : null),
+      S.unlocks.bow ? stat('Bow', 'Pull back anywhere to aim') : null),
     tomorrowHint(S.day + 1),
     h('p', { class: 'fine' }, 'Red shapes show where an attack will land.'),
     btn('Enter ▶', () => { sfx('tap'); setModal(null); go('dungeon', { daily }); }, 'primary')));
@@ -350,7 +350,9 @@ hooks.runEnded = (r: RunSummary) => {
   const scrap = overflow.reduce((sum, i) => sum + Math.round(ITEMS[i].value * 0.5), 0);
   S.stock.push(...kept);
   S.coins += scrap;
-  S.phase = 'morning';
+  S.phase = 'idle';
+  S.petFed = false;
+  S.offerSeen = false;
   // clearing an introduction level moves you on and may unlock something
   let unlocked: Unlock | undefined;
   const levelBonus = r.complete ? 30 : 0;
@@ -381,7 +383,7 @@ hooks.runEnded = (r: RunSummary) => {
     r.banked.length && S.pet ? h('p', { class: 'fine' }, `${S.pet.name} ran ${r.banked.length} of these home safely.`) : null,
     overflow.length ? h('p', { class: 'fine' }, `Stock room full (${storageCap()}). ${overflow.length} sold for scrap: +${scrap} coins.`) : null,
     r.lost.length ? h('p', { class: 'fine' }, `Lost: ${r.lost.map((i) => ITEMS[i].name).join(', ')}`) : null,
-    btn('Continue ▶', () => { sfx('tap'); offerCard(); }, 'primary')));
+    btn('Back to the surface ▶', () => { sfx('tap'); adSlot(idleState); }, 'primary')));
   if (r.complete) confetti(unlocked ? 48 : 30);
 };
 
@@ -393,15 +395,17 @@ function offerCard() {
   const list = unseen.length ? unseen : pool.length ? pool : offerData.offers;
   const o = list[Math.floor(Math.random() * list.length)];
   const cat = offerData.categories.find((c) => c.id === o.cat)!;
+  S.offerSeen = true;
+  save();
   log('offer_shown', { offer: o.id, cat: o.cat });
   const done = (action: string) => {
     log('offer_action', { offer: o.id, action });
     sfx('tap');
-    morning();
+    setModal(null);
   };
   setModal(h('div', { class: 'card offer' },
     h('div', { class: 'sponsored' }, `Sponsored by ${BRAND} · Example only`),
-    h('h2', {}, 'Real-world loot'),
+    h('h2', {}, 'Personal Offers'),
     h('div', { class: 'offerbody' },
       h('div', { class: 'offeremoji' }, cat.emoji),
       h('div', {},
@@ -424,15 +428,14 @@ function morning() {
   }
   S.phase = 'morning';
   save();
-  hud((hudLabel = `Day ${S.day + 1}`));
+  hud((hudLabel = `Day ${S.day}`));
   const slots = shelfCount();
   setModal(pricingPanel('Morning: stock and price',
     `${S.stock.length} items in stock, ${slots} on display at a time. Check today’s promotion, then set your prices.`,
-    'Open the shop', () => {
-      setModal(null);
-      log('day_start', { tutorial: false, stock: S.stock, prices: S.prices, promo: promoFor(S.day + 1)?.name });
+    'Open Shop!', () => openSign(() => {
+      log('day_start', { tutorial: false, stock: S.stock, prices: S.prices, promo: promoFor(S.day)?.name });
       go('shop', {});
-    }, S.day + 1));
+    }), S.day));
 }
 
 // ---- close and tally ----
@@ -456,7 +459,7 @@ function summary(d: DaySummary) {
     verdict = `No campaign today. Hit the ${BRAND} button tomorrow: Cashback draws about ${walkIns * RULES.campaignMult} customers instead of ${walkIns}, and sends them home happy.`;
   }
   log('summary', { profit, estimateOther: other, campaign: d.campaignUsed });
-  S.phase = 'upgrade';
+  S.phase = 'dungeon';
   save();
   hooks.hud();
   const ratio = d.startStock.length ? d.sales / d.startStock.length : 0;
@@ -467,7 +470,7 @@ function summary(d: DaySummary) {
   const gain = profit - other;
   if (rating >= 2) sfx('level');
   setModal(h('div', { class: 'card pop' },
-    hero(`Day ${S.day + 1}`, headline),
+    hero(`Day ${S.day}`, headline),
     stars(rating),
     h('div', { class: 'bignum' }, icon('coin'), big, h('small', {}, 'profit')),
     h('div', { class: 'tiles' },
@@ -508,8 +511,8 @@ function levelCheck() {
           h('div', { class: 'omerchant' }, 'Single use. Expires in 7 days.'),
           h('div', { class: 'ocash' }, '+x% Cashback'))),
       h('p', { class: 'fine' }, 'Levels come from playing, never from spending or chance. In the app, this would be a real discount tied to your account.'),
-      btn('Claim ▶', () => { sfx('tap'); upgrade(); }, 'primary')));
-  } else upgrade();
+      btn('Claim ▶', () => { sfx('tap'); eveningCard(); }, 'primary')));
+  } else eveningCard();
 }
 
 // ---- upgrade ----
@@ -563,26 +566,86 @@ function upgradeTree(onDone: () => void) {
   render();
 }
 
-function upgrade() {
+// ---- evening: closing time ----
+
+function eveningCard() {
   go('shop', { idle: true });
-  hud((hudLabel = `Day ${S.day + 1}`));
-  upgradeTree(endCard);
+  setModal(h('div', { class: 'card pop' },
+    hero(`Evening ${S.day}`, 'Closing time', 'The till is counted and the sun is going down. Head out and restock in the Techno Dungeon.'),
+    tomorrowHint(S.day + 1),
+    btn('Head out ▶', () => { sfx('tap'); city(); }, 'primary')));
 }
 
-// ---- the end of the loop ----
+// ---- the sign on the door flips to OPEN ----
 
-function endCard() {
-  S.phase = 'done';
+function openSign(then: () => void) {
+  sfx('level');
+  const sign = h('div', { class: 'doorsign' },
+    h('div', { class: 'signstring' }),
+    h('div', { class: 'signcard' },
+      h('div', { class: 'face closed' }, h('small', {}, 'Sorry, we’re'), h('b', {}, 'CLOSED')),
+      h('div', { class: 'face open' }, h('small', {}, 'Come in, we’re'), h('b', {}, 'OPEN'))));
+  setModal(h('div', { class: 'signwrap' }, sign, h('p', {}, 'Doors open!')));
+  window.setTimeout(() => { setModal(null); then(); }, 1500);
+}
+
+// ---- ad slot: shown on the way back up from the dungeon ----
+
+function adSlot(then: () => void) {
+  log('ad_shown', { slot: 'surface' });
+  let left = 3;
+  const go2 = btn(`Continue in ${left}`, () => { if (left > 0) return; sfx('tap'); log('ad_closed', { slot: 'surface' }); then(); }, 'primary');
+  go2.disabled = true;
+  const timer = window.setInterval(() => {
+    left--;
+    if (left > 0) go2.textContent = `Continue in ${left}`;
+    else { window.clearInterval(timer); go2.disabled = false; go2.textContent = 'Continue ▶'; }
+  }, 1000);
+  setModal(h('div', { class: 'card adcard' },
+    h('div', { class: 'sponsored' }, 'Sponsored · Ad slot'),
+    h('div', { class: 'adslot', role: 'img', 'aria-label': 'Placeholder for a 16:9 partner advertisement' },
+      h('b', {}, 'Your ad here'),
+      h('span', {}, 'Partner promotion · 16:9 · 1280 × 720'),
+      h('i', {}, 'Placeholder')),
+    h('p', { class: 'fine' }, `Climbing back to the surface… In the app this slot shows one ${BRAND} partner promotion per dungeon run.`),
+    go2));
+}
+
+// ---- night: idle time at home ----
+
+function idleState() {
+  S.phase = 'idle';
   save();
-  hooks.hud();
-  log('loop_complete', { day: S.day, coins: S.coins, xp: S.xp });
+  setModal(null);
+  hud((hudLabel = `Night ${S.day}`));
+  go('shop', { home: true });
+}
+
+hooks.cityHome = () => idleState();
+hooks.home = (what) => {
+  if (what === 'upgrades') upgradeTree(() => { setModal(null); hooks.hud(); if (game.scene.isActive('shop')) go('shop', { home: true }); });
+  else if (what === 'offers') offerCard();
+  else if (what === 'door') { hud((hudLabel = `Night ${S.day}`)); go('city', { time: 'night' }); }
+  else sleepCard();
+};
+
+function sleepCard() {
   setModal(h('div', { class: 'card pop' },
-    hero('Loop complete', 'See you tomorrow!', 'Fight, price, sell, upgrade: that is one full loop. In the app, play is capped at one loop a day, so the shop is always waiting.'),
-    tomorrowHint(S.day + 2),
-    h('div', { class: 'stats' }, stat('Coins', S.coins), stat('Shop level', S.level), S.pet ? stat('Companion', `${S.pet.name} the ${PET_INFO[S.pet.kind].label}`) : null, stat('Dungeon', S.dungeonLevel >= INTRO.length ? 'Daily unlocked' : `Level ${S.dungeonLevel} of ${INTRO.length}`), stat('Local partners', `${S.partners.length} of ${PARTNERS.length}`), stat('Shop List', `${S.shopList.length} saved`)),
-    btn('Play the next day ▶', () => { sfx('tap'); S.day++; S.phase = 'dungeon'; save(); city(); }, 'primary'),
-    btn('Download event log', downloadLog),
-    btn('Start over', () => { resetState(); title(); go('shop', { idle: true }); }, 'ghost')));
+    hero(`Night ${S.day}`, 'Call it a night?', 'Sleep until morning. Tomorrow you set prices and open the shop.'),
+    tomorrowHint(S.day + 1),
+    h('div', { class: 'stats' }, stat('Coins', S.coins), stat('In stock', S.stock.length), stat('Dungeon', S.dungeonLevel >= INTRO.length ? 'Daily unlocked' : `Level ${S.dungeonLevel} of ${INTRO.length}`), S.pet ? stat(S.pet.name, S.petFed ? 'Fed' : 'Hungry') : null),
+    btn('💤 Sleep', () => {
+      sfx('tap');
+      log('loop_complete', { day: S.day, coins: S.coins, xp: S.xp });
+      S.day++;
+      S.phase = 'morning';
+      save();
+      setModal(h('div', { class: 'sleepfade' }, h('b', {}, '💤'), h('span', {}, `Day ${S.day}`)));
+      window.setTimeout(morning, 1300);
+    }, 'primary'),
+    btn('Stay up a little longer', () => setModal(null)),
+    btn('Download event log', downloadLog, 'ghost'),
+    btn('Start over', () => { resetState(); setModal(null); appHome(); }, 'ghost')));
 }
 
 function downloadLog() {

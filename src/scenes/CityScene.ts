@@ -7,6 +7,7 @@ import { music, sfx } from '../audio';
 import { CITY_H } from '../scenery';
 import { Pet } from '../pet';
 import { person } from '../sprites';
+import { INTRO } from '../levels';
 
 /** Local businesses the shopkeeper can partner with. Names are invented. */
 export const PARTNERS = [
@@ -50,9 +51,12 @@ export class CityScene extends Phaser.Scene {
   }
 
   private idle = false;
+  /** Evening is the walk to the dungeon; night is after the run, when everything is shut. */
+  private when: 'day' | 'evening' | 'night' = 'evening';
 
-  init(data: { idle?: boolean }) {
+  init(data: { idle?: boolean; time?: 'evening' | 'night' }) {
     this.idle = !!data.idle;
+    this.when = this.idle ? 'day' : data.time ?? 'evening';
   }
 
   create() {
@@ -123,16 +127,34 @@ export class CityScene extends Phaser.Scene {
       return;
     }
 
+    // the sun is down: dusk on the way to the dungeon, full night once the run is over
+    const night = this.when === 'night';
+    this.add.rectangle(180, CITY_H / 2, 360, CITY_H, night ? 0x070b2e : 0x2b1d5c, night ? 0.66 : 0.4).setDepth(4000);
+    if (!night) this.add.rectangle(180, CITY_H / 2, 360, CITY_H, 0xff7a3c, 0.12).setDepth(4000);
+    const glow = (x: number, y: number, sc: number, tint: number, a = 0.6) => this.add.image(x, y, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(tint).setAlpha(a).setScale(sc).setDepth(4001);
+    for (const x of [90, 180, 270]) glow(x, 446, 1.5, 0xffd27a);
+    glow(SHOP_X, 420, 1.3, 0xffc46b, night ? 0.6 : 0.4);
+    if (!night) for (const pt of PARTNERS) glow(pt.x, 420, 1.2, 0xffc46b, 0.35);
+    glow(180, 770, night ? 1.4 : 2, night ? 0xff5470 : 0x35e0ff, 0.45);
+    if (night) this.add.image(180, 800, 'gate_locked').setOrigin(0.5, 1).setScale(0.36).setDepth(800);
+
     // things to do
-    this.spots.push({ x: SHOP_X, y: 480, r: 26, label: 'Your shop', act: () => toast('Closed for the night. Stock up in the dungeon first.') });
+    this.spots.push(night
+      ? { x: SHOP_X, y: 480, r: 26, label: 'Go back inside', act: () => { this.busy = true; hooks.cityHome(); } }
+      : { x: SHOP_X, y: 480, r: 26, label: 'Your shop', act: () => toast('Closed for the evening. Stock up in the dungeon first.') });
     for (const pt of PARTNERS) {
-      this.spots.push({ x: pt.x, y: 480, r: 26, label: S.partners.includes(pt.id) ? `${pt.name} · partner` : `Visit ${pt.name}`, act: () => this.visit(pt) });
+      this.spots.push(night
+        ? { x: pt.x, y: 480, r: 26, label: `${pt.name} · closed`, act: () => toast(`${pt.name} is closed. Come back tomorrow!`) }
+        : { x: pt.x, y: 480, r: 26, label: S.partners.includes(pt.id) ? `${pt.name} · partner` : `Visit ${pt.name}`, act: () => this.visit(pt) });
       this.label(pt.name, pt.x, 342, S.partners.includes(pt.id));
     }
     this.label('Your shop', SHOP_X, 342, true);
     this.spots.push({ x: 180, y: 300, r: 44, label: 'The Merlion', act: () => toast('The Merlion keeps watch over the bay.') });
-    this.spots.push({ x: 180, y: 792, r: 40, label: S.dungeonLevel >= 5 ? 'Enter the Daily Dungeon ▶' : `Enter the dungeon · Level ${S.dungeonLevel + 1} ▶`, act: () => this.leave() });
-    this.label('Techno Dungeon', 180, 776, true);
+    const rooms = S.dungeonLevel >= INTRO.length ? 4 : INTRO[S.dungeonLevel].rooms.length;
+    this.spots.push(night
+      ? { x: 180, y: 806, r: 40, label: '🔒 Techno Dungeon · closed', act: () => toast('The Techno Dungeon is closed. Come back tomorrow!') }
+      : { x: 180, y: 792, r: 40, label: S.dungeonLevel >= INTRO.length ? `Enter the Daily Dungeon · ${rooms} rooms ▶` : `Enter the dungeon · Level ${S.dungeonLevel + 1} · ${rooms} room${rooms > 1 ? 's' : ''} ▶`, act: () => this.leave() });
+    this.label(night ? 'Techno Dungeon · closed' : 'Techno Dungeon', 180, 776, !night);
 
     this.shadow = this.add.image(0, 0, 'shadow').setScale(0.5);
     this.hero = this.add.sprite(0, 0, `av_${S.avatar}`, 0).setScale(0.6);
@@ -143,8 +165,10 @@ export class CityScene extends Phaser.Scene {
     cam.setBounds(0, 0, 360, CITY_H);
     cam.startFollow(this.hero, true, 0.15, 0.15);
 
-    this.time.addEvent({ delay: 2400, loop: true, callback: () => this.pedestrian() });
-    for (let i = 0; i < 4; i++) this.pedestrian(Math.random() * 360);
+    if (this.when !== 'night') {
+      this.time.addEvent({ delay: 2400, loop: true, callback: () => this.pedestrian() });
+      for (let i = 0; i < 4; i++) this.pedestrian(Math.random() * 360);
+    }
 
     this.promptEl = h('div', { class: 'cityprompt' });
     setSheet(h('div', { class: 'cityui' }, this.promptEl, buildControls()));
@@ -152,7 +176,8 @@ export class CityScene extends Phaser.Scene {
       this.labels.forEach((l) => l.el.remove());
       setSheet(null);
     });
-    log('city_enter', { day: S.day });
+    if (night) this.time.delayedCall(400, () => toast('The street is quiet. Everything is shut until morning.'));
+    log('city_enter', { day: S.day, time: this.when });
   }
 
   private label(text: string, x: number, y: number, on: boolean) {

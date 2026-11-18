@@ -4,7 +4,7 @@
 
 import { S, save, log } from './state';
 
-export type Branch = 'store' | 'combat' | 'pack' | 'pet';
+export type Branch = 'store' | 'room' | 'combat' | 'pack' | 'pet';
 
 export interface Node {
   id: string;
@@ -23,6 +23,7 @@ export interface Node {
 
 export const BRANCHES: { id: Branch; name: string; emoji: string; blurb: string }[] = [
   { id: 'store', name: 'Store', emoji: '🏪', blurb: 'More shelves, better customers, a shop people want to linger in.' },
+  { id: 'room', name: 'Room', emoji: '🛋️', blurb: 'Make the place your own. Furniture is for you, not the customers.' },
   { id: 'combat', name: 'Combat', emoji: '⚔️', blurb: 'Hit harder, last longer, roll more often.' },
   { id: 'pack', name: 'Backpack', emoji: '🎒', blurb: 'Carry more loot out of every run.' },
   { id: 'pet', name: 'Pet', emoji: '🐾', blurb: 'Your companion fights, carries and runs loot home.' },
@@ -41,6 +42,13 @@ export const NODES: Node[] = [
   { id: 'carpet', branch: 'store', name: 'Fine carpet', emoji: '🧶', cost: 90, needs: 'curtains', levels: ['Plush: customers tolerate prices 3% higher'] },
   { id: 'wood', branch: 'store', name: 'Wood finish', emoji: '🪵', cost: 90, needs: 'lights', levels: ['Polished: customers tolerate prices 3% higher'] },
 
+  // ---- personal room: cosmetic ----
+  { id: 'bed', branch: 'room', name: 'Proper bed', emoji: '🛏️', cost: 80, levels: ['Swap the futon for a real bed with a quilt'] },
+  { id: 'rug', branch: 'room', name: 'Woven rug', emoji: '🧶', cost: 50, levels: ['A rug by the counter'] },
+  { id: 'armchair', branch: 'room', name: 'Armchair', emoji: '💺', cost: 70, levels: ['A reading chair by the wall'] },
+  { id: 'posters', branch: 'room', name: 'Posters', emoji: '🖼️', cost: 40, levels: ['Two framed posters for the back wall'] },
+  { id: 'lamp', branch: 'room', name: 'Floor lamp', emoji: '🛋️', cost: 60, levels: ['Warm light for late nights'] },
+
   // ---- combat ----
   { id: 'melee', branch: 'combat', name: 'Charged wrench', emoji: '🔧', cost: 120, levels: ['+1 melee damage', '+2 melee damage', '+3 melee damage'] },
   { id: 'health', branch: 'combat', name: 'Tough apron', emoji: '❤️', cost: 100, levels: ['6 hearts (from 5)', '7 hearts', '8 hearts'] },
@@ -49,6 +57,7 @@ export const NODES: Node[] = [
   { id: 'roll', branch: 'combat', name: 'Quick feet', emoji: '💨', cost: 90, levels: ['Dodge roll recharges 25% faster', 'Dodge roll recharges 45% faster'] },
   { id: 'ranged', branch: 'combat', name: 'Tuned bow', emoji: '🏹', cost: 130, gate: () => (S.unlocks.bow ? null : 'Unlock the bow by clearing dungeon Level 3'),
     levels: ['+1 bow damage', '+2 bow damage and faster reload'] },
+  { id: 'focus', branch: 'combat', name: 'Steady aim', emoji: '🎯', cost: 110, needs: 'ranged', levels: ['Hold your aim for 3 seconds (from 2)', 'Hold your aim for 4 seconds'] },
 
   // ---- backpack ----
   { id: 'bag', branch: 'pack', name: 'Bigger backpack', emoji: '🎒', cost: 100, levels: ['8 loot slots (from 6)', '10 loot slots', '12 loot slots'] },
@@ -105,7 +114,9 @@ export const bowDamage = () => 2 + lvl('ranged');
 export const bowReload = () => (lvl('ranged') >= 2 ? 0.45 : 0.65);
 export const bagSlots = () => 6 + 2 * lvl('bag');
 
-export const petDamage = () => 1 + lvl('petDmg');
+export const petDamage = () => 1 + lvl('petDmg') + (S.petFed ? 1 : 0);
+/** How long the bow can be held drawn, in seconds. */
+export const aimTime = () => 2 + lvl('focus');
 export const petAttackGap = () => 1.6 * [1, 0.75, 0.55, 0.4][lvl('petSpeed')];
 export const petBagSlots = () => (S.pet ? 2 * lvl('petBag') : 0);
 export const hasCourier = () => !!S.pet && lvl('courier') > 0;
