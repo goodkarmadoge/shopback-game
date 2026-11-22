@@ -89,6 +89,7 @@ export class ShopScene extends Phaser.Scene {
   private solids: { x: number; y: number; w: number; h: number }[] = [];
   private spots: { x: number; y: number; r: number; label: () => string; act: () => void }[] = [];
   private nearSpot: ShopScene['spots'][number] | null = null;
+  private coachTimer?: Phaser.Time.TimerEvent;
   private closeAt = 0;
   private dayLen = 1;
   private clockEl: HTMLElement | null = null;
@@ -224,6 +225,8 @@ export class ShopScene extends Phaser.Scene {
   update(_: number, dms: number) {
     const dt = Math.min(dms, 50) / 1000;
     this.tick();
+    // self-heal: the shopkeeper must always have controls while they are free to walk
+    if (!this.idle && !this.over && !this.cur && this.promptEl && !this.promptEl.isConnected) this.showControls();
     if (!this.idle && !this.over) this.moveHero(dt);
     if (!this.idle) this.pet?.follow(dt, this.p.x, this.p.y, this.p.fx, this.p.fy);
     for (const cu of this.custs) {
@@ -259,8 +262,10 @@ export class ShopScene extends Phaser.Scene {
       p.fy = a.y / m;
       const nx = Phaser.Math.Clamp(p.x + a.x * 125 * dt, 26, 334);
       const ny = Phaser.Math.Clamp(p.y + a.y * 125 * dt, 104, 494);
-      if (!this.blocked(nx, p.y)) p.x = nx;
-      if (!this.blocked(p.x, ny)) p.y = ny;
+      // never trap the shopkeeper: if they are somehow inside furniture, let them walk out
+      const stuck = this.blocked(p.x, p.y);
+      if (stuck || !this.blocked(nx, p.y)) p.x = nx;
+      if (stuck || !this.blocked(p.x, ny)) p.y = ny;
     }
     this.placeHero(moving);
 
@@ -408,7 +413,7 @@ export class ShopScene extends Phaser.Scene {
     this.coachEl = h('div', { class: 'coachtop' });
     floatLayer.append(this.coachEl);
     this.dom.push(this.coachEl);
-    this.coach('Closed for the night. Potter about, then head to bed.');
+    this.coach('Closed for the night. Walk around, then head to bed.');
     const pet = S.pet;
     this.spots.push(
       { x: 50, y: 240, r: 30, label: () => '💤 Go to sleep', act: () => hooks.home('sleep') },
@@ -418,15 +423,17 @@ export class ShopScene extends Phaser.Scene {
       { x: 180, y: 488, r: 24, label: () => '🚪 Step outside', act: () => hooks.home('door') },
     );
     if (pet) this.spots.push({ x: 104, y: 232, r: 20, label: () => (S.petFed ? `${pet.name} is full` : `🍖 Feed ${pet.name} · 5 coins`), act: () => this.feed() });
-    this.p = { x: 180, y: 190, fx: 0, fy: 1 };
+    this.p = { x: 180, y: 228, fx: 0, fy: 1 };
     this.showControls();
   }
 
   private rest() {
+    // stand just in front of the couch, clear of its collision box
     this.p.x = 304;
-    this.p.y = 234;
+    this.p.y = 240;
     this.p.fx = 0;
     this.p.fy = 1;
+    sfx('tap');
     floatAt(304, 190, '♪', 'gain', 1200);
     this.coach(pickOne(['Feet up. The till is counted and the street is quiet.', 'A good day’s trade. The couch has earned its keep.', 'You could get used to this.']));
   }
@@ -467,6 +474,11 @@ export class ShopScene extends Phaser.Scene {
     this.coachEl.classList.remove('pop');
     void this.coachEl.offsetWidth;
     this.coachEl.classList.add('pop');
+    // at home the banner sits over the middle of the room: clear it so it never hides the shopkeeper
+    if (this.home) {
+      this.coachTimer?.remove();
+      this.coachTimer = this.time.delayedCall(4500, () => this.coachEl.replaceChildren());
+    }
   }
 
   private bubble(cu: Cust, face: string, word: string, cls = '') {

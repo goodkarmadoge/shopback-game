@@ -4,6 +4,8 @@ import { h } from './ui';
 
 const keys = new Set<string>();
 const stick = { x: 0, y: 0 };
+/** Detaches the previous on-screen stick's listeners when a new one is built. */
+let activeStick: (() => void) | null = null;
 const pressed = { attack: false, dodge: false };
 let bowShot: { x: number; y: number } | null = null;
 
@@ -69,10 +71,29 @@ export function buildControls(withBow = false): HTMLElement {
     stick.x = stick.y = 0;
     knob.style.transform = '';
   };
-  base.addEventListener('pointerdown', (e) => { base.setPointerCapture(e.pointerId); move(e); });
-  base.addEventListener('pointermove', (e) => { if (base.hasPointerCapture(e.pointerId)) move(e); });
-  base.addEventListener('pointerup', end);
-  base.addEventListener('pointercancel', end);
+  // The stick follows one finger from the moment it lands on it. It is tracked on the
+  // window rather than through pointer capture, so it keeps working if the browser drops
+  // the capture or an earlier stick was removed while a finger was still on it.
+  activeStick?.();
+  let finger: number | null = null;
+  const onMove = (e: PointerEvent) => { if (e.pointerId === finger) move(e); };
+  const onUp = (e: PointerEvent) => { if (e.pointerId === finger) { finger = null; end(); } };
+  base.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    finger = e.pointerId;
+    try { base.setPointerCapture(e.pointerId); } catch { /* capture is a nicety, not a requirement */ }
+    move(e);
+  });
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onUp);
+  activeStick = () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onUp);
+    finger = null;
+    end();
+  };
 
   const action = (k: 'attack' | 'dodge', label: string, hint: string) => {
     const b = h('button', { class: `act ${k}`, type: 'button' }, h('b', {}, label), h('small', {}, hint));
